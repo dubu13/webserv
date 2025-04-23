@@ -19,7 +19,6 @@ class Socket {
 
         void createSocket();
         void setSocketOptions();
-        void setupAddress();
         void bindSocket();
         static void setNonBlocking(int fd);
         void startListening();

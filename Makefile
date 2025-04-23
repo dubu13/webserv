@@ -5,9 +5,9 @@ CXXFLAGS = -std=c++17 -Wall -Wextra -Werror -g3
 
 SRC_DIR = src
 OBJ_DIR = obj
-INCLUDES = -I ./inc
+INCLUDES = -I ./inc -I ./inc/server
 
-SRCS = $(wildcard $(SRC_DIR)/*.cpp)
+SRCS = $(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(SRC_DIR)/server/*.cpp)
 OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
 
 all: $(NAME)
@@ -19,7 +19,7 @@ $(NAME): $(OBJS)
 	echo $(GREEN)"Building $(NAME)..."$(DEFAULT);
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
-	@mkdir -p $(OBJ_DIR)
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 clean:

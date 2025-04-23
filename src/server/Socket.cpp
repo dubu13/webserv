@@ -7,7 +7,7 @@ Socket::Socket(int port) :_server_fd(-1), _port(port){
 Socket::~Socket() {
     if (_server_fd != -1) {
         if (close(_server_fd) < 0)
-            throw std::runtime_error("Failed to close socket");
+            std::cerr << "Failed to close socket" << std::endl;
     }
 }
 
@@ -25,15 +25,6 @@ void Socket::setSocketOptions() {
         throw std::runtime_error("Failed to set socket options");
     }
     std::cout << "Socket options set successfully." << std::endl;
-}
-
-void Socket::setupAddress() {
-    if (bind(_server_fd, (struct sockaddr *)&_address, sizeof(_address)) < 0) {
-        if (close(_server_fd) < 0)
-            throw std::runtime_error("Failed to close socket");
-        throw std::runtime_error("Failed to bind socket");
-    }
-    std::cout << "Socket bound successfully." << std::endl;
 }
 
 void Socket::bindSocket() {
