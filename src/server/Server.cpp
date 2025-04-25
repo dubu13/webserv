@@ -66,6 +66,13 @@ void Server::start() {
     _socket.bindSocket();
     _socket.startListening();
     Socket::setNonBlocking(_socket.getFd());
+    /*add server socket to poll_fds
+        get active sockets
+        for each active socket:
+            if it's the server socket, accept new connection
+            else handle client activity
+    */ 
+    
 
     std::cout << "Server started, waiting for connections..." << std::endl;
 }

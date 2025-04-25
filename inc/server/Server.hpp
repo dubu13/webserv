@@ -13,6 +13,7 @@ class Server {
         std::unordered_set<int> _clientFds;
         rlimit _rlim;
         bool _running;
+
     public:
         Server(int port);
         ~Server();
