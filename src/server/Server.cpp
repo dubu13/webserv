@@ -50,9 +50,9 @@ bool Server::hasClient(int client_fd) const {
     return _clientFds.find(client_fd) != _clientFds.end();
 }
 
-size_t Server::getClientCount() const {
-    return _clientFds.size();
-}
+// size_t Server::getClientCount() const {
+//     return _clientFds.size();
+// }
 
 const std::unordered_set<int>& Server::getClients() const {
     return _clientFds;
@@ -85,4 +85,44 @@ void Server::stop() {
     }
     _clientFds.clear();
     std::cout << "Server stopped." << std::endl;
+}
+
+void Server::handleClientRead(int client_fd){
+    char buffer[4096]; // can be adjusted based on expected message size
+
+    ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer));
+
+    if (bytes_read < 0) {
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            disconnectClient(client_fd);
+            throw std::runtime_error("Failed to read from client socket");
+        }
+    }
+    if (bytes_read == 0) {
+        std::cout << "Client " << client_fd << " disconnected." << std::endl;
+        disconnectClient(client_fd);
+        return;
+    }
+
+    _incomingData[client_fd].append(buffer, bytes_read);
+    std::cout << "Received data from client " << client_fd << ": " << _incomingData[client_fd] << std::endl;
+
+    _incomingData[client_fd].clear(); // clear buffer after processing
+    // need http parser
+}
+
+void Server::handleClientWrite(int client_fd) {
+    if (_outgoingData.find(client_fd) == _outgoingData.end() || _outgoingData[client_fd].empty())
+        return;
+
+    const std::string& data = _outgoingData[client_fd];
+
+    ssize_t bytes_written = write(client_fd, data.c_str(), data.size());
+
+    if (bytes_written < 0) {
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            disconnectClient(client_fd);
+            throw std::runtime_error("Failed to write to client socket");
+        }
+    }
 }
