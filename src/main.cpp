@@ -23,8 +23,8 @@ int main() {
             try {
                 server.acceptNewConnection();
             
-                if (server.getClientCount() > 0)
-                    std::cout << "Current clients: " << server.getClientCount() << std::endl;
+                // if (server.getClientCount() > 0)
+                    // std::cout << "Current clients: " << server.getClientCount() << std::endl;
                 
                 usleep(10000);
             }

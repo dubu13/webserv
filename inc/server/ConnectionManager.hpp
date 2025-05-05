@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Server.hpp"
 #include <poll.h>
 #include <vector>
 #include <algorithm>
@@ -21,3 +20,4 @@ class ConnectionManager {
         bool isServerSocket(int fd) const;
         std::vector<struct pollfd> checkConnection();
 };
+#include "Server.hpp"
