@@ -1,4 +1,7 @@
 #include "Server.hpp"
+#include "HTTPResponse.hpp"
+#include "HTTPGetRequest.hpp"
+#include "IHTTPRequest.hpp"
 
 #include <csignal>
 
