@@ -42,8 +42,7 @@ std::vector<struct pollfd> ConnectionManager::checkConnection() {
     if (ready < 0) {
         if (errno == EINTR)
             return active_fds; // Interrupted by signal, returning empty vector
-        else
-            throw std::runtime_error("poll() failed");
+        throw std::runtime_error("poll() failed");
     }
 
     if (ready > 0) {
