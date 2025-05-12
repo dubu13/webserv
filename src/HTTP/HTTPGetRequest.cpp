@@ -1,0 +1,53 @@
+#include "HTTPGetRequest.hpp"
+
+HTTPGetRequest::HTTPGetRequest() = default;
+
+bool HTTPGetRequest::parseRequest(const std::string &data) {
+  try {
+		size_t pos = data.find("\r\n");
+		if (pos == std::string::npos) {
+      throw HTTPParseException("Invalid request format");
+		}
+		_requestLine = parseRequestLine(data.substr(0, pos));
+		
+		if (_requestLine.method != Method::GET) {
+      throw HTTPParseException("Invalid method: " +
+                               methodToString(_requestLine.method));
+		}
+
+		size_t headerStart = pos + 2;
+		size_t headerEnd = data.find("\r\n\r\n", headerStart);
+
+		if (headerEnd == std::string::npos) {
+      throw HTTPParseException("Invalid header format");
+		}
+
+		headers = parseHeaders(data.substr(headerStart, headerEnd - headerStart));
+
+		return true;
+  } catch (const HTTPParseException &e) {
+    std::cerr << "Error parsing request: " << e.what() << std::endl;
+    return false;
+  }
+}
+
+IHTTPRequest::Method HTTPGetRequest::getMethod() const {
+  return _requestLine.method;
+}
+
+std::string HTTPGetRequest::getUri() const { return _requestLine.uri; }
+
+std::string HTTPGetRequest::getVersion() const { return _requestLine.version; }
+
+std::optional<std::string>
+HTTPGetRequest::getHeader(const std::string &key) const {
+  auto it = headers.find(key);
+  if (it != headers.end()) {
+    return it->second;
+  }
+  return std::nullopt;
+}
+
+const std::map<std::string, std::string> &HTTPGetRequest::getHeaders() const {
+  return headers;
+}
