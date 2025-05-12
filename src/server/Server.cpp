@@ -108,14 +108,23 @@ void Server::handleClientRead(int client_fd){
     std::cout << "Received data from client " << client_fd << ": " << _incomingData[client_fd] << std::endl;
 
     _incomingData[client_fd].clear(); // clear buffer after processing
-    // need http parser
+ 
+    /*
+        check http request
+        parse http request
+        get http response
+        save http response to _outgoingData[client_fd]
+        clear _incomingData[client_fd]
+        remove the connectoin than add client_fd to _connectionManager with POLLOUT for writing
+        handle error
+    */
 }
 
 void Server::handleClientWrite(int client_fd) {
     if (_outgoingData.find(client_fd) == _outgoingData.end() || _outgoingData[client_fd].empty())
         return;
 
-    const std::string& data = _outgoingData[client_fd];
+    std::string& data = _outgoingData[client_fd];
 
     ssize_t bytes_written = write(client_fd, data.c_str(), data.size());
 
@@ -124,5 +133,21 @@ void Server::handleClientWrite(int client_fd) {
             disconnectClient(client_fd);
             throw std::runtime_error("Failed to write to client socket");
         }
+        return;
+    }
+    if (bytes_written == 0) {
+        std::cout << "Client " << client_fd << " disconnected." << std::endl;
+        disconnectClient(client_fd);
+        return;
+    }
+
+    data.erase(0, bytes_written);
+    _connectionManager.removeConnection(client_fd); 
+    if (!data.empty())
+        _connectionManager.addConnection(client_fd, POLLOUT);
+    else {
+        _outgoingData.erase(client_fd);
+        _connectionManager.addConnection(client_fd, POLLIN);
+        std::cout << "Data sent to client " << client_fd << std::endl;
     }
 }
