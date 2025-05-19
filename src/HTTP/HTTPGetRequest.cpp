@@ -1,4 +1,6 @@
 #include "HTTPGetRequest.hpp"
+#include "IHTTPRequest.hpp"
+#include <iostream>
 
 HTTPGetRequest::HTTPGetRequest() = default;
 
@@ -22,7 +24,7 @@ bool HTTPGetRequest::parseRequest(const std::string &data) {
       throw HTTPParseException("Invalid header format");
 		}
 
-		headers = parseHeaders(data.substr(headerStart, headerEnd - headerStart));
+		_headers = parseHeaders(data.substr(headerStart, headerEnd - headerStart));
 
 		return true;
   } catch (const HTTPParseException &e) {
@@ -39,15 +41,14 @@ std::string HTTPGetRequest::getUri() const { return _requestLine.uri; }
 
 std::string HTTPGetRequest::getVersion() const { return _requestLine.version; }
 
-std::optional<std::string>
-HTTPGetRequest::getHeader(const std::string &key) const {
-  auto it = headers.find(key);
-  if (it != headers.end()) {
+std::string HTTPGetRequest::getHeader(const std::string &key) const {
+  auto it = _headers.find(key);
+  if (it != _headers.end()) {
     return it->second;
   }
-  return std::nullopt;
+  return "";
 }
 
-const std::map<std::string, std::string> &HTTPGetRequest::getHeaders() const {
-  return headers;
+std::map<std::string, std::string> HTTPGetRequest::getHeaders() const {
+    return _headers;
 }
