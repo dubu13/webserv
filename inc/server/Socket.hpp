@@ -12,9 +12,9 @@ class Socket {
     private:
         int _server_fd;
         struct sockaddr_in _address;
-        int _port;
+        // int _port;
     public:
-        Socket(int port);
+        Socket();
         ~Socket();
 
         void createSocket();

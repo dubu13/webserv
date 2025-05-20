@@ -4,6 +4,8 @@
 
 HTTPGetRequest::HTTPGetRequest() = default;
 
+HTTPGetRequest::~HTTPGetRequest() = default;
+
 bool HTTPGetRequest::parseRequest(const std::string &data) {
   try {
 		size_t pos = data.find("\r\n");
@@ -40,6 +42,8 @@ IHTTPRequest::Method HTTPGetRequest::getMethod() const {
 std::string HTTPGetRequest::getUri() const { return _requestLine.uri; }
 
 std::string HTTPGetRequest::getVersion() const { return _requestLine.version; }
+
+std::string HTTPGetRequest::getBody() const { return ""; }
 
 std::string HTTPGetRequest::getHeader(const std::string &key) const {
   auto it = _headers.find(key);

@@ -8,7 +8,7 @@ class ConnectionManager {
     private:
         std::vector<struct pollfd> _poll_fds;
         static const int _timeout = 1000; // 1 second
-        bool _running;
+        // bool _running;
 
     public:
         ConnectionManager();

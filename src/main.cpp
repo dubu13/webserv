@@ -1,5 +1,4 @@
 #include "Server.hpp"
-#include "HTTPResponse.hpp"
 #include "HTTPGetRequest.hpp"
 #include "IHTTPRequest.hpp"
 
@@ -16,7 +15,7 @@ int main() {
     try {
         signal(SIGINT, signalHandler);
 
-        Server server(8080);
+        Server server;
 
         std::cout << "Server started successfully" << std::endl;
 

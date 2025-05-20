@@ -1,4 +1,4 @@
-#include "IHttpRequest.hpp"
+#include "IHTTPRequest.hpp"
 
 HTTPParseException::HTTPParseException(const std::string &message)
     : std::runtime_error(message) {}
@@ -43,7 +43,7 @@ IHTTPRequest::parseRequestLine(const std::string &line) {
   res.uri = line.substr(first_space + 1, last_space - first_space - 1);
   res.version = line.substr(last_space + 1);
 
-  if (!isValidMethod(res.method) || !isValidUri(res.uri) ||
+  if (!isValidMethod(methodToString(res.method)) || !isValidUri(res.uri) ||
       !isValidVersion(res.version)) {
     throw HTTPParseException("Invalid request line: " + line);
   }
@@ -81,8 +81,8 @@ bool IHTTPRequest::isValidVersion(const std::string &version) {
 }
 
 bool IHTTPRequest::isValidMethod(const std::string &method) {
-  return method == Method::GET || method == Method::POST ||
-         method == Method::DELETE;
+  return method == "GET" || method == "POST"||
+         method == "DELETE";
 }
 
 bool IHTTPRequest::isValidUri(const std::string &uri) {
@@ -91,8 +91,18 @@ bool IHTTPRequest::isValidUri(const std::string &uri) {
 
 std::unique_ptr<IHTTPRequest>
 IHTTPRequest::createRequest(const std::string &requestData) {
+	(void) requestData;
   // Parse the request data and create an appropriate IHTTPRequest object
   // This is a placeholder implementation. You should implement the actual
   // parsing logic here.
   return nullptr;
+}
+
+IHTTPRequest::RequestLine &IHTTPRequest::RequestLine::operator=(const RequestLine &other) {
+  if (this != &other) {
+    method = other.method;
+    uri = other.uri;
+    version = other.version;
+  }
+  return *this;
 }

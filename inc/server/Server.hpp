@@ -20,7 +20,7 @@ class Server {
         bool _running;
 
     public:
-        Server(int port);
+        Server();
         ~Server();
 
         void acceptNewConnection();

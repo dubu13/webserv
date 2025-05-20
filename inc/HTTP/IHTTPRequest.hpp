@@ -17,6 +17,7 @@ public:
     Method method;
     std::string uri;
     std::string version;
+		RequestLine &operator=(const RequestLine &other);
   };
 
   virtual ~IHTTPRequest() = default;
@@ -38,7 +39,7 @@ public:
 protected:
   static Method stringToMethod(const std::string &method);
   static std::string methodToString(Method method);
-  static std::string parseRequestLine(const std::string &line);
+  static RequestLine parseRequestLine(const std::string &line);
   static std::map<std::string, std::string>
   parseHeaders(const std::string &headers);
   static std::string parseBody(const std::string &body);

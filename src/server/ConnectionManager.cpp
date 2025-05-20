@@ -1,6 +1,6 @@
 #include "ConnectionManager.hpp"
 
-ConnectionManager::ConnectionManager() : _running(false){}
+ConnectionManager::ConnectionManager() {}
 
 ConnectionManager::~ConnectionManager() {
     _poll_fds.clear();

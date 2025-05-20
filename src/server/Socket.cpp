@@ -1,6 +1,6 @@
 #include "Socket.hpp"
 
-Socket::Socket(int port) :_server_fd(-1), _port(port){
+Socket::Socket() :_server_fd(-1){
     memset(&_address, 0, sizeof(_address));
 }
 

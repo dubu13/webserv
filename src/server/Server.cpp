@@ -1,6 +1,6 @@
 #include "Server.hpp"
 
-Server::Server(int port) : _socket(port), _running(false) {
+Server::Server() : _socket() {
     if (getrlimit(RLIMIT_NOFILE, &_rlim) == -1) {
         throw std::runtime_error("Failed to get file descriptor limit");
     }
