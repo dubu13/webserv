@@ -66,14 +66,31 @@ void Server::start() {
     _socket.bindSocket();
     _socket.startListening();
     Socket::setNonBlocking(_socket.getFd());
-    /*add server socket to poll_fds
-        get active sockets
-        for each active socket:
-            if it's the server socket, accept new connection
-            else handle client activity
-    */ 
-    
 
+    _connectionManager.addConnection(_socket.getFd(), POLLIN);
+
+    while (_running) {
+        try {
+            std::vector<struct pollfd> active_fds = _connectionManager.checkConnection();
+
+            for (const auto& poll_fd : active_fds) {
+                if (_connectionManager.isServerSocket(poll_fd.fd) && _connectionManager.hasActivity(&poll_fd, POLLIN))
+                    acceptNewConnection();
+                else {
+                    if (_connectionManager.hasActivity(&poll_fd, POLLIN)) {
+                        handleClientRead(poll_fd.fd);
+                    }
+                    if (_connectionManager.hasActivity(&poll_fd, POLLOUT)) {
+                        handleClientWrite(poll_fd.fd);
+                    }
+                }
+            }
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Error in event loop: " << e.what() << std::endl;
+            continue;
+        }
+    }
     std::cout << "Server started, waiting for connections..." << std::endl;
 }
 
@@ -106,7 +123,7 @@ void Server::handleClientRead(int client_fd){
 
     _incomingData[client_fd].append(buffer, bytes_read);
     std::cout << "Received data from client " << client_fd << ": " << _incomingData[client_fd] << std::endl;
-
+ 
     _incomingData[client_fd].clear(); // clear buffer after processing
  
     /*

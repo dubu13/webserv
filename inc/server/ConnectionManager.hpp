@@ -16,7 +16,7 @@ class ConnectionManager {
     
         void addConnection(int fd, short event);
         void removeConnection(int fd);
-        bool hasActivity(struct pollfd *poll_fd, short event) const;
+        bool hasActivity(const struct pollfd *poll_fd, short event) const;
         bool isServerSocket(int fd) const;
         std::vector<struct pollfd> checkConnection();
 };

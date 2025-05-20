@@ -26,7 +26,7 @@ void ConnectionManager::removeConnection(int fd) {
     }
 }
 
-bool ConnectionManager::hasActivity(struct pollfd *poll_fd, short event) const {
+bool ConnectionManager::hasActivity(const struct pollfd *poll_fd, short event) const {
     return (poll_fd->revents & event);
 }
 
