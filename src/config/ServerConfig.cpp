@@ -6,11 +6,11 @@ ServerConfig::ServerConfig()
       client_max_body_size(1024 * 1024) {} // 1 MB default
 
 bool ServerConfig::matchesHost(const std::string &host) const {
-  if (server_names.empty()) {
+  if (server_name.empty()) {
     return true; // If no server names are specified, match all
   }
-  return std::find(server_names.begin(), server_names.end(), host) !=
-         server_names.end();
+  return std::find(server_name.begin(), server_name.end(), host) !=
+         server_name.end();
 }
 
 const LocationConfig *ServerConfig::getLocation(const std::string &path) const {

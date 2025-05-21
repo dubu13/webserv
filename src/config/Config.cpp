@@ -28,7 +28,7 @@ std::unordered_map<std::string, ServerConfig>& Config::parseConfig() {
 
 void Config::parseServerBlock(std::ifstream &file, ServerConfig &server) {
     std::string line;
-
+    (void)server; // Unused parameter
     while (std::getline(file, line)) {
         if (line.empty() || line[0] == '#')
             continue;
@@ -48,7 +48,7 @@ void Config::parseServerBlock(std::ifstream &file, ServerConfig &server) {
 
 void Config::parseLocationBlock(std::ifstream &file, LocationConfig &location) {
     std::string line;
-
+    (void)location; // Unused parameter
     while (std::getline(file, line)) {
         if (line.empty() || line[0] == '#')
             continue;
