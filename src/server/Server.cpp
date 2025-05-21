@@ -1,10 +1,12 @@
 #include "Server.hpp"
+#include <arpa/inet.h> // for inet_ntop
 
 Server::Server() : _socket() {
     if (getrlimit(RLIMIT_NOFILE, &_rlim) == -1) {
         throw std::runtime_error("Failed to get file descriptor limit");
     }
     std::cout << "System allows " << _rlim.rlim_cur << " file descriptors." << std::endl;
+    std::cout << "Server will listen on port " << port << std::endl;
 }
 
 Server::~Server() {
@@ -88,36 +90,71 @@ void Server::stop() {
 }
 
 void Server::handleClientRead(int client_fd){
-    char buffer[4096]; // can be adjusted based on expected message size
-
-    ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer));
+    char buffer[4096] = {0}; // Initialize buffer to zeros
+    
+    ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) - 1); // Leave space for null terminator
 
     if (bytes_read < 0) {
         if (errno != EAGAIN && errno != EWOULDBLOCK) {
             disconnectClient(client_fd);
             throw std::runtime_error("Failed to read from client socket");
         }
+        return; // Return without processing if there was an error
     }
+    
     if (bytes_read == 0) {
         std::cout << "Client " << client_fd << " disconnected." << std::endl;
         disconnectClient(client_fd);
         return;
     }
 
+    // Ensure null termination
+    buffer[bytes_read] = '\0';
+    
+    // Append to the incoming data buffer
     _incomingData[client_fd].append(buffer, bytes_read);
-    std::cout << "Received data from client " << client_fd << ": " << _incomingData[client_fd] << std::endl;
-
-    _incomingData[client_fd].clear(); // clear buffer after processing
- 
-    /*
-        check http request
-        parse http request
-        get http response
-        save http response to _outgoingData[client_fd]
-        clear _incomingData[client_fd]
-        remove the connectoin than add client_fd to _connectionManager with POLLOUT for writing
-        handle error
-    */
+    
+    // Check for complete HTTP request (ends with \r\n\r\n)
+    if (_incomingData[client_fd].find("\r\n\r\n") != std::string::npos) {
+        std::cout << "Complete HTTP request received from client " << client_fd << std::endl;
+        
+        try {
+            // Create a simple HTTP response (for now)
+            std::string httpResponse = 
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/html\r\n"
+                "Content-Length: 22\r\n"
+                "\r\n"
+                "<h1>Hello, World!</h1>";
+            
+            // Store the response for sending
+            _outgoingData[client_fd] = httpResponse;
+            
+            // Switch the client connection from read to write mode
+            _connectionManager.removeConnection(client_fd);
+            _connectionManager.addConnection(client_fd, POLLOUT);
+            
+            // Clear the incoming data buffer for this client
+            _incomingData[client_fd].clear();
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Error processing request: " << e.what() << std::endl;
+            
+            // Send an error response
+            std::string errorResponse = 
+                "HTTP/1.1 500 Internal Server Error\r\n"
+                "Content-Type: text/html\r\n"
+                "Content-Length: 36\r\n"
+                "\r\n"
+                "<h1>500 Internal Server Error</h1>";
+            
+            _outgoingData[client_fd] = errorResponse;
+            _connectionManager.removeConnection(client_fd);
+            _connectionManager.addConnection(client_fd, POLLOUT);
+            _incomingData[client_fd].clear();
+        }
+    }
+    // If we don't have a complete request yet, keep reading
 }
 
 void Server::handleClientWrite(int client_fd) {

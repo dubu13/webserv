@@ -1,4 +1,9 @@
 #include "Socket.hpp"
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 
 Socket::Socket() :_server_fd(-1){
     memset(&_address, 0, sizeof(_address));
@@ -28,12 +33,23 @@ void Socket::setSocketOptions() {
 }
 
 void Socket::bindSocket() {
+    // Configure the address structure
+    _address.sin_family = AF_INET;
+    _address.sin_port = htons(_port);
+    
+    // Convert string IP to network format
+    if (inet_pton(AF_INET, _host.c_str(), &_address.sin_addr) <= 0) {
+        if (close(_server_fd) < 0)
+            throw std::runtime_error("Failed to close socket");
+        throw std::runtime_error("Failed to convert host address");
+    }
+    
     if (bind(_server_fd, (struct sockaddr *)&_address, sizeof(_address)) < 0) {
         if (close(_server_fd) < 0)
             throw std::runtime_error("Failed to close socket");
         throw std::runtime_error("Failed to bind socket");
     }
-    std::cout << "Socket bound successfully" << std::endl;
+    std::cout << "Socket bound successfully to " << _host << ":" << _port << std::endl;
 }
 
 void Socket::startListening() {

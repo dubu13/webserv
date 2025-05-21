@@ -4,7 +4,6 @@
 #include "ConnectionManager.hpp"
 #include <sys/resource.h> // for struct rlimit
 #include <unordered_set>
-#include <arpa/inet.h> // for inet_ntop
 #include <fcntl.h> // for fcntl
 #include <unistd.h> // for close
 #include <unordered_map>
@@ -34,4 +33,8 @@ class Server {
         // client data handling
         void handleClientRead(int client_fd);
         void handleClientWrite(int client_fd);
+
+        int getSocketFd() const { return _socket.getFd(); }
+        ConnectionManager& getConnectionManager() { return _connectionManager; }
+        bool isServerSocket(int fd) const { return fd == _socket.getFd(); }
 };

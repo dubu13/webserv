@@ -8,34 +8,34 @@ HTTPGetRequest::~HTTPGetRequest() = default;
 
 bool HTTPGetRequest::parseRequest(const std::string &data) {
   try {
-		size_t pos = data.find("\r\n");
-		if (pos == std::string::npos) {
+    size_t pos = data.find("\r\n");
+    if (pos == std::string::npos) {
       throw HTTPParseException("Invalid request format");
-		}
-		_requestLine = parseRequestLine(data.substr(0, pos));
-		
-		if (_requestLine.method != Method::GET) {
-      throw HTTPParseException("Invalid method: " +
-                               methodToString(_requestLine.method));
-		}
+    }
+    _requestLine = parseRequestLine(data.substr(0, pos));
+    
+    if (_requestLine.method != HTTP::Method::GET) {
+      throw HTTPParseException("Invalid method: " + 
+                             HTTP::methodToString(_requestLine.method));
+    }
 
-		size_t headerStart = pos + 2;
-		size_t headerEnd = data.find("\r\n\r\n", headerStart);
+    size_t headerStart = pos + 2;
+    size_t headerEnd = data.find("\r\n\r\n", headerStart);
 
-		if (headerEnd == std::string::npos) {
+    if (headerEnd == std::string::npos) {
       throw HTTPParseException("Invalid header format");
-		}
+    }
 
-		_headers = parseHeaders(data.substr(headerStart, headerEnd - headerStart));
+    _headers = parseHeaders(data.substr(headerStart, headerEnd - headerStart));
 
-		return true;
+    return true;
   } catch (const HTTPParseException &e) {
     std::cerr << "Error parsing request: " << e.what() << std::endl;
     return false;
   }
 }
 
-IHTTPRequest::Method HTTPGetRequest::getMethod() const {
+HTTP::Method HTTPGetRequest::getMethod() const {
   return _requestLine.method;
 }
 
