@@ -1,7 +1,7 @@
 #include "Server.hpp"
 #include "HTTPGetRequest.hpp"
 #include "IHTTPRequest.hpp"
-
+#include "ConnectionManager.hpp"
 #include <csignal>
 
 bool g_running = true;
@@ -15,11 +15,13 @@ int main() {
     try {
         signal(SIGINT, signalHandler);
 
-        Server server;
-
+        Server server(8080);  // Initialize with port
         std::cout << "Server started successfully" << std::endl;
         server.start();
         
+        // Use the server's connection manager
+        ConnectionManager& connectionManager = server.getConnectionManager();
+
         // Add server socket to poll fds
         connectionManager.addConnection(server.getSocketFd(), POLLIN);
 

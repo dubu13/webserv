@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "ServerConfig.hpp"
 
 ServerConfig::ServerConfig()

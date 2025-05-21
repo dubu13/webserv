@@ -12,9 +12,10 @@ class Socket {
     private:
         int _server_fd;
         struct sockaddr_in _address;
-        // int _port;
+        int _port;
+        std::string _host;
     public:
-        Socket();
+        Socket(int port = 8080, const std::string& host = "0.0.0.0");
         ~Socket();
 
         void createSocket();

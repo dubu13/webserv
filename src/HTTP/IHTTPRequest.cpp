@@ -15,8 +15,9 @@ HTTP::RequestLine IHTTPRequest::parseRequestLine(const std::string &line) {
   std::string method_str = line.substr(0, first_space);
   try {
     res.method = HTTP::stringToMethod(method_str);
-  } catch (const std::exception &e) throw HTTPParseException(
-      "Invalid method: " + method_str);
+  } catch (const std::exception &e) {
+    throw HTTPParseException("Invalid method: " + method_str);
+  }
 
   size_t last_space = line.find(' ', first_space + 1);
   if (last_space == std::string::npos)
@@ -77,9 +78,10 @@ IHTTPRequest::createRequest(const std::string &requestData) {
         return request;
     } else
       throw HTTPParseException("Unsupported HTTP method: " + methodStr);
-  } catch (const HTTPParseException &e) std::cerr
-      << "Error creating request: " << e.what() << std::endl;
-  catch (const std::exception &e) std::cerr
-      << "Unexpected error creating request: " << e.what() << std::endl;
+  } catch (const HTTPParseException &e) {
+    std::cerr << "Error creating request: " << e.what() << std::endl;
+  } catch (const std::exception &e) {
+    std::cerr << "Unexpected error creating request: " << e.what() << std::endl;
+  }
   return nullptr;
 }

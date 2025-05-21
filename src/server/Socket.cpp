@@ -5,7 +5,8 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-Socket::Socket() :_server_fd(-1){
+Socket::Socket(int port, const std::string& host) 
+    : _server_fd(-1), _port(port), _host(host) {
     memset(&_address, 0, sizeof(_address));
 }
 

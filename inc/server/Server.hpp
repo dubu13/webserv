@@ -8,6 +8,9 @@
 #include <unistd.h> // for close
 #include <unordered_map>
 
+// Forward declaration of the IHTTPRequest class
+class IHTTPRequest;
+
 class Server {
     private:
         Socket _socket;
@@ -19,7 +22,7 @@ class Server {
         bool _running;
 
     public:
-        Server();
+        Server(int port = 8080);
         ~Server();
 
         void acceptNewConnection();
@@ -33,6 +36,7 @@ class Server {
         // client data handling
         void handleClientRead(int client_fd);
         void handleClientWrite(int client_fd);
+        void handleGETRequest(int client_fd, const IHTTPRequest& request);
 
         int getSocketFd() const { return _socket.getFd(); }
         ConnectionManager& getConnectionManager() { return _connectionManager; }
