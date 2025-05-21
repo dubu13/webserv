@@ -9,7 +9,7 @@ class ServerConfig {
 public:
   std::string host;
   int port;
-  std::vector<std::string> server_names;
+  std::string server_name;
   std::string root;
   std::map<int, std::string> error_pages;
   size_t client_max_body_size;
