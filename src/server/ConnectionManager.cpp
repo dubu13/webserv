@@ -1,4 +1,9 @@
 #include "ConnectionManager.hpp"
+#include "Socket.hpp" // For SocketException
+#include <iostream>
+#include <cerrno>
+#include <cstring> // For strerror
+#include <stdexcept>
 
 ConnectionManager::ConnectionManager() {}
 
@@ -26,32 +31,36 @@ void ConnectionManager::removeConnection(int fd) {
     }
 }
 
+std::vector<struct pollfd> ConnectionManager::checkConnection() {
+    std::vector<struct pollfd> active_fds;
+
+    if (_poll_fds.empty())
+        return active_fds;
+
+    int ret = poll(_poll_fds.data(), _poll_fds.size(), _timeout);
+
+    if (ret < 0) {
+        if (errno == EINTR)
+            return active_fds;
+        throw SocketException("poll() failed: " + std::string(strerror(errno)));
+    }
+
+    if (ret > 0) {
+        for (const struct pollfd& poll_fd : _poll_fds) {
+            if (poll_fd.revents > 0) {
+                std::cout << "Activity on fd: " << poll_fd.fd << std::endl;
+                active_fds.push_back(poll_fd);
+            }
+        }
+    }
+
+    return active_fds;
+}
+
 bool ConnectionManager::hasActivity(const struct pollfd *poll_fd, short event) const {
-    return (poll_fd->revents & event);
+    return (poll_fd->revents & event) == event;
 }
 
 bool ConnectionManager::isServerSocket(int fd) const {
     return (!_poll_fds.empty() && _poll_fds[0].fd == fd);
-}
-
-std::vector<struct pollfd> ConnectionManager::checkConnection() {
-    std::vector<struct pollfd> active_fds;
-
-    int ready = poll(_poll_fds.data(), _poll_fds.size(), _timeout);
-
-    if (ready < 0) {
-        if (errno == EINTR)
-            return active_fds; // Interrupted by signal, returning empty vector
-        throw std::runtime_error("poll() failed");
-    }
-
-    if (ready > 0) {
-        for (auto &poll_fd : _poll_fds) {
-            if (poll_fd.revents != 0) {
-                active_fds.push_back(poll_fd);
-                std::cout << "Activity on fd: " << poll_fd.fd << std::endl;
-            }
-        }
-    }
-    return active_fds;
 }
