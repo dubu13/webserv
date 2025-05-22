@@ -49,8 +49,18 @@ std::unique_ptr<HTTPResponse> HTTPHandler::handleGET(const IHTTPRequest& request
     }
 }
 
-    }
-        return handleError(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
+std::unique_ptr<HTTPResponse> HTTPHandler::handlePOST(const IHTTPRequest& request) {
+    (void)request; // Suppress unused parameter warning
+    // Implement POST handling logic
+    return handleError(HTTP::StatusCode::NOT_IMPLEMENTED);
+}
+
+std::unique_ptr<HTTPResponse> HTTPHandler::handleDELETE(const IHTTPRequest& request) {
+    (void)request; // Suppress unused parameter warning
+    // Implement DELETE handling logic here
+    return handleError(HTTP::StatusCode::NOT_IMPLEMENTED);
+}
+
 std::unique_ptr<HTTPResponse> HTTPHandler::handleError(HTTP::StatusCode status) {
     return _errorHandler.generateErrorResponse(status);
 }
