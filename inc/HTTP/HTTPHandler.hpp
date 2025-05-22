@@ -30,19 +30,15 @@ public:
   HTTPHandler(const std::string &root = "./www");
   ~HTTPHandler();
 
-  // Main request handling methods
   std::unique_ptr<HTTPResponse> handleRequest(const std::string &requestData);
   std::unique_ptr<HTTPResponse> handleGET(const IHTTPRequest &request);
   std::unique_ptr<HTTPResponse> handlePOST(const IHTTPRequest &request);
   std::unique_ptr<HTTPResponse> handleDELETE(const IHTTPRequest &request);
 
-  // Error handling method
   std::unique_ptr<HTTPResponse> handleError(HTTP::StatusCode status);
 
-  // Setters
   void setRootDirectory(const std::string &root);
 
-  // Getters
   ResourceHandler &getResourceHandler() { return _resourceHandler; }
   ErrorHandler &getErrorHandler() { return _errorHandler; }
 };
