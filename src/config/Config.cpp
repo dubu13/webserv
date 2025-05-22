@@ -1,6 +1,7 @@
 #include "Config.hpp"
 
-Config::Config(const std::string &fileName) : _fileName(fileName) {}
+Config::Config(const std::string &fileName) : _fileName(fileName) {
+}
 
 std::unordered_map<std::string, ServerConfig>& Config::parseConfig() {
     std::ifstream file(_fileName);
@@ -12,10 +13,10 @@ std::unordered_map<std::string, ServerConfig>& Config::parseConfig() {
         if (line.empty() || line[0] == '#')
             continue;
         if (line == "server {") {
-            ServerConfig server;
-            parseServerBlock(file, server);
-            std::string key = server.host + ":" + std::to_string(server.port);
-            _servers[key] = server;
+            ServerConfig serverBlock;
+            serverBlock.parseServerBlock(file);
+            std::string key = serverBlock.host + ":" + std::to_string(serverBlock.port);
+            _servers[key] = serverBlock;
         }
         else {
             file.close();
@@ -24,36 +25,4 @@ std::unordered_map<std::string, ServerConfig>& Config::parseConfig() {
     }
     file.close();
     return _servers;
-}
-
-void Config::parseServerBlock(std::ifstream &file, ServerConfig &server) {
-    std::string line;
-    (void)server; // Unused parameter
-    while (std::getline(file, line)) {
-        if (line.empty() || line[0] == '#')
-            continue;
-        if (line == "}")
-            return;
-         std::ifstream iss(line);
-         std::string directive;
-         iss >> directive;
-
-         if (directive == "location") {
-            LocationConfig location;
-            parseLocationBlock(file, location);
-         }
-        //     hadnle other directives
-    }
-}
-
-void Config::parseLocationBlock(std::ifstream &file, LocationConfig &location) {
-    std::string line;
-    (void)location; // Unused parameter
-    while (std::getline(file, line)) {
-        if (line.empty() || line[0] == '#')
-            continue;
-        if (line == "}")
-            return;
-        // Parse location directives
-    }
 }
