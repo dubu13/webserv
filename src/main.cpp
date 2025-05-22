@@ -2,7 +2,10 @@
 #include "HTTPGetRequest.hpp"
 #include "IHTTPRequest.hpp"
 #include "ConnectionManager.hpp"
+#include "Socket.hpp" 
 #include <csignal>
+#include <string>
+#include <iostream>
 
 bool g_running = true;
 
@@ -53,6 +56,12 @@ int main() {
                 
                 usleep(10000); // Small delay to prevent CPU hogging
             }
+            catch (const SocketException& e) {
+                std::cerr << "Socket error: " << e.what() << std::endl;
+            }
+            catch (const HTTPParseException& e) {
+                std::cerr << "HTTP parsing error: " << e.what() << std::endl;
+            }
             catch (const std::exception &e) {
                 std::cerr << "Error in server loop: " << e.what() << std::endl;
             }
@@ -60,6 +69,10 @@ int main() {
 
         server.stop();
         std::cout << "Server stopped successfully" << std::endl;
+    }
+    catch (const SocketException& e) {
+        std::cerr << "Fatal socket error: " << e.what() << std::endl;
+        return 1;
     }
     catch (const std::exception &e) {
         std::cerr << "Fatal error: " << e.what() << std::endl;
