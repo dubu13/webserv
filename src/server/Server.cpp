@@ -10,8 +10,9 @@ Server::Server(int port) : _socket(port), _running(false) {
     std::cout << "System allows " << _rlim.rlim_cur << " file descriptors." << std::endl;
     std::cout << "Server will listen on port " << port << std::endl;
     
-    // Create the ClientHandler after initialization
-    _clientHandler = new ClientHandler(_connectionManager);
+    // Create the ClientHandler after initialization with all required parameters
+    // Use "./www" as default web root and 60 seconds as default timeout
+    _clientHandler = new ClientHandler(_connectionManager, "./www", 60);
 }
 
 Server::~Server() {
@@ -75,7 +76,38 @@ void Server::start() {
 
 void Server::stop() {
     _running = false;
+    
+    // First disconnect all clients
+    // Get a copy of client file descriptors to avoid modification during iteration
+    const std::unordered_set<int> clients = _clientHandler->getClients();
+    std::vector<int> clientFds(clients.begin(), clients.end());
+    
+    for (size_t i = 0; i < clientFds.size(); i++) {
+        try {
+            _clientHandler->disconnectClient(clientFds[i]);
+        } catch (const std::exception& e) {
+            std::cerr << "Error disconnecting client: " << e.what() << std::endl;
+        }
+    }
+    
+    // Remove the server socket from the connection manager
+    _connectionManager.removeConnection(_socket.getFd());
+    
+    // Close the server socket
+    try {
+        _socket.closeSocket();
+    } catch (const std::exception& e) {
+        std::cerr << "Error closing server socket: " << e.what() << std::endl;
+    }
+    
     std::cout << "Server stopped." << std::endl;
+}
+
+// Check for client timeouts
+void Server::checkClientTimeouts() {
+    if (_clientHandler) {
+        _clientHandler->checkTimeouts();
+    }
 }
 
 // Implement the methods that delegate to ClientHandler
@@ -85,4 +117,9 @@ void Server::handleClientRead(int clientFd) {
 
 void Server::handleClientWrite(int clientFd) {
     _clientHandler->handleClientWrite(clientFd);
+}
+
+// Implement the hasClient method
+bool Server::hasClient(int fd) const {
+    return _clientHandler->hasClient(fd);
 }

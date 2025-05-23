@@ -11,10 +11,7 @@ Socket::Socket(int port, const std::string& host)
 }
 
 Socket::~Socket() {
-    if (_server_fd != -1) {
-        if (close(_server_fd) < 0)
-            std::cerr << "Failed to close socket" << std::endl;
-    }
+    closeSocket();
 }
 
 void Socket::createSocket() {
@@ -64,6 +61,17 @@ void Socket::startListening() {
 
 int Socket::getFd() const {
     return _server_fd;
+}
+
+void Socket::closeSocket() {
+    if (_server_fd != -1) {
+        if (close(_server_fd) < 0) {
+            std::cerr << "Failed to close socket: " << strerror(errno) << std::endl;
+        } else {
+            std::cout << "Socket closed successfully." << std::endl;
+            _server_fd = -1; // Mark as closed
+        }
+    }
 }
 
 void Socket::setNonBlocking(int fd) {

@@ -27,6 +27,7 @@ public:
     void start();
     void stop();
     void acceptNewConnection();
+    void checkClientTimeouts();  // Added declaration
     
     int getSocketFd() const { return _socket.getFd(); }
     ConnectionManager& getConnectionManager() { return _connectionManager; }

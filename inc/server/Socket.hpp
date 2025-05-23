@@ -29,5 +29,6 @@ class Socket {
         void bindSocket();
         static void setNonBlocking(int fd);
         void startListening();
+        void closeSocket();  // Added closeSocket method
         int getFd() const;
 };
