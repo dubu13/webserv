@@ -1,12 +1,12 @@
-#include "HTTP/HTTPGetRequest.hpp"
+#include "HTTP/HTTPPostRequest.hpp"
 #include "HTTP/IHTTPRequest.hpp"
 #include <iostream>
 
-HTTPGetRequest::HTTPGetRequest() = default;
+HTTPPostRequest::HTTPPostRequest() = default;
 
-HTTPGetRequest::~HTTPGetRequest() = default;
+HTTPPostRequest::~HTTPPostRequest() = default;
 
-bool HTTPGetRequest::parseRequest(const std::string &data) {
+bool HTTPPostRequest::parseRequest(const std::string &data) {
   try {
     size_t pos = data.find("\r\n");
     if (pos == std::string::npos) {
@@ -14,7 +14,7 @@ bool HTTPGetRequest::parseRequest(const std::string &data) {
     }
     _requestLine = parseRequestLine(data.substr(0, pos));
     
-    if (_requestLine.method != HTTP::Method::GET) {
+    if (_requestLine.method != HTTP::Method::POST) {
       throw HTTPParseException("Invalid method: " + 
                              HTTP::methodToString(_requestLine.method));
     }
@@ -28,6 +28,12 @@ bool HTTPGetRequest::parseRequest(const std::string &data) {
 
     _headers = parseHeaders(data.substr(headerStart, headerEnd - headerStart));
 
+    // Extract body - everything after the headers
+    size_t bodyStart = headerEnd + 4; // Skip the \r\n\r\n
+    if (bodyStart < data.length()) {
+      _body = data.substr(bodyStart);
+    }
+
     return true;
   } catch (const HTTPParseException &e) {
     std::cerr << "Error parsing request: " << e.what() << std::endl;
@@ -35,24 +41,29 @@ bool HTTPGetRequest::parseRequest(const std::string &data) {
   }
 }
 
-HTTP::Method HTTPGetRequest::getMethod() const {
+HTTP::Method HTTPPostRequest::getMethod() const {
   return _requestLine.method;
 }
 
-std::string HTTPGetRequest::getUri() const { return _requestLine.uri; }
+std::string HTTPPostRequest::getUri() const {
+  return _requestLine.uri;
+}
 
-std::string HTTPGetRequest::getVersion() const { return _requestLine.version; }
+std::string HTTPPostRequest::getVersion() const {
+  return _requestLine.version;
+}
 
-std::string HTTPGetRequest::getBody() const { return ""; }
+std::string HTTPPostRequest::getBody() const {
+  return _body;
+}
 
-std::string HTTPGetRequest::getHeader(const std::string &key) const {
+std::string HTTPPostRequest::getHeader(const std::string &key) const {
   auto it = _headers.find(key);
-  if (it != _headers.end()) {
+  if (it != _headers.end())
     return it->second;
-  }
   return "";
 }
 
-std::map<std::string, std::string> HTTPGetRequest::getHeaders() const {
-    return _headers;
+std::map<std::string, std::string> HTTPPostRequest::getHeaders() const {
+  return _headers;
 }

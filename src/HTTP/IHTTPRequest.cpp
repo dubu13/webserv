@@ -1,97 +1,93 @@
-#include "IHttpRequest.hpp"
+#include "IHTTPRequest.hpp"
+#include "HTTPGetRequest.hpp"
+#include "HTTPPostRequest.hpp"
+#include "HTTPDeleteRequest.hpp"
+#include "HTTPTypes.hpp"
+#include <iostream>
 
 HTTPParseException::HTTPParseException(const std::string &message)
     : std::runtime_error(message) {}
 
-IHTTPRequest::Method IHTTPRequest::stringToMethod(const std::string &method) {
-  if (method == "GET") {
-    return Method::GET;
-  } else if (method == "POST") {
-    return Method::POST;
-  } else if (method == "DELETE") {
-    return Method::DELETE;
-  } else {
-    throw HTTPParseException("Invalid HTTP method: " + method);
-  }
-}
+HTTP::RequestLine IHTTPRequest::parseRequestLine(const std::string &line) {
+  HTTP::RequestLine res;
 
-std::string IHTTPRequest::methodToString(Method method) {
-  switch (method) {
-  case Method::GET:
-    return "GET";
-  case Method::POST:
-    return "POST";
-  case Method::DELETE:
-    return "DELETE";
-  default:
-    throw HTTPParseException("Invalid HTTP method");
-  }
-}
-
-IHTTPRequest::RequestLine
-IHTTPRequest::parseRequestLine(const std::string &line) {
   size_t first_space = line.find(' ');
-  size_t last_space = line.rfind(' ');
+  if (first_space == std::string::npos)
+    throw HTTPParseException("Invalid request line: missing URI and version");
 
-	if (first_space == std::string::npos || second_space == std::string::npos ||
-			first_space == second_space) {
-		throw HTTPParseException("Invalid request line: " + line);
-	}
+  std::string method_str = line.substr(0, first_space);
+  try {
+    res.method = HTTP::stringToMethod(method_str);
+  } catch (const std::exception &e) {
+    throw HTTPParseException("Invalid method: " + method_str);
+  }
 
-	RequestLine res;
-	res.method = stringToMethod(line.substr(0, first_space));
-	res.uri = line.substr(first_space + 1, last_space - first_space - 1);
-	res.version = line.substr(last_space + 1);
+  size_t last_space = line.find(' ', first_space + 1);
+  if (last_space == std::string::npos)
+    throw HTTPParseException("Invalid request line: missing version");
 
-	if (!isValidMethod(res.method) || !isValidUri(res.uri) ||
-			!isValidVersion(res.version)) {
-		throw HTTPParseException("Invalid request line: " + line);
-	}
-
-	return res;
+  res.uri = line.substr(first_space + 1, last_space - first_space - 1);
+  res.version = line.substr(last_space + 1);
+  if (!HTTP::isValidMethod(HTTP::methodToString(res.method)) ||
+      !HTTP::isValidUri(res.uri) || !HTTP::isValidVersion(res.version)) {
+    throw HTTPParseException("Invalid request line components");
+  }
+  return res;
 }
 
 std::map<std::string, std::string>
 IHTTPRequest::parseHeaders(const std::string &headerSection) {
-	std::map<std::string, std::string> headers;
-	size_t pos = 0;
-	size_t prev = 0;
+  std::map<std::string, std::string> headers;
+  size_t pos = 0;
+  size_t prev = 0;
 
-	while ((pos = headerSection.find("\r\n", prev)) != std::string::npos) {
-		std::string line = headerSection.substr(prev, pos - prev);
-		if (line.empty()) break;
-
-		size_t colonPos = line.find(':');
-		if (colonPos != std::string::npos) {
-			std::string key = line.substr(0, colonPos);
-			std::string value = line.substr(colonPos + 2);
-			headers[key] = value;
-		} else {
-			throw HTTPParseException("Invalid header line: " + line);
-		}
-		prev = pos + 2; // Skip "\r\n"
-	}
-
-	return headers;
-}
-
-bool IHTTPRequest::isValidVersion(const std::string &version) {
-	return version == "HTTP/1.0" || version == "HTTP/1.1";
-}
-
-bool IHTTPRequest::isValidMethod(const std::string &method) {
-	return method == "GET" || method == "POST" || method == "DELETE";
-}
-
-bool IHTTPRequest::isValidUri(const std::string &uri) {
-	// Check if the URI starts with a slash
-	return !uri.empty() && uri[0] == '/';
+  while ((pos = headerSection.find("\r\n", prev)) != std::string::npos) {
+    std::string line = headerSection.substr(prev, pos - prev);
+    if (line.empty())
+      break;
+    size_t colonPos = line.find(':');
+    if (colonPos != std::string::npos) {
+      std::string key = line.substr(0, colonPos);
+      std::string value = line.substr(colonPos + 1);
+      size_t valueStart = value.find_first_not_of(" \t");
+      if (valueStart != std::string::npos)
+        value = value.substr(valueStart);
+      headers[key] = value;
+    } else
+      throw HTTPParseException("Invalid header format: " + line);
+    prev = pos + 2;
+  }
+  return headers;
 }
 
 std::unique_ptr<IHTTPRequest>
 IHTTPRequest::createRequest(const std::string &requestData) {
-	// Parse the request data and create an appropriate IHTTPRequest object
-	// This is a placeholder implementation. You should implement the actual
-	// parsing logic here.
-	return nullptr;
+  try {
+    // Determine HTTP method from request
+    size_t endOfLine = requestData.find("\r\n");
+    if (endOfLine != std::string::npos) {
+      std::string requestLine = requestData.substr(0, endOfLine);
+      size_t firstSpace = requestLine.find(' ');
+      if (firstSpace != std::string::npos) {
+        std::string methodStr = requestLine.substr(0, firstSpace);
+
+        std::unique_ptr<IHTTPRequest> request;
+        if (methodStr == "GET") {
+          request = std::make_unique<HTTPGetRequest>();
+        } else if (methodStr == "POST") {
+          request = std::make_unique<HTTPPostRequest>();
+        } else if (methodStr == "DELETE") {
+          request = std::make_unique<HTTPDeleteRequest>();
+        } else {
+          throw HTTPParseException("Unsupported HTTP method: " + methodStr);
+        }
+
+        if (request && request->parseRequest(requestData))
+          return request;
+      }
+    }
+  } catch (const HTTPParseException &e) {
+    std::cerr << "Error creating request: " << e.what() << std::endl;
+  }
+  return nullptr;
 }

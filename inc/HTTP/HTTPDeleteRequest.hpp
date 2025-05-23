@@ -4,14 +4,14 @@
 #include <map>
 #include <string>
 
-class HTTPGetRequest : public IHTTPRequest {
+class HTTPDeleteRequest : public IHTTPRequest {
 private:
   HTTP::RequestLine _requestLine;
   std::map<std::string, std::string> _headers;
 
 public:
-  HTTPGetRequest();
-  ~HTTPGetRequest() override;
+  HTTPDeleteRequest();
+  ~HTTPDeleteRequest() override;
 
   bool parseRequest(const std::string &data) override;
   HTTP::Method getMethod() const override;

@@ -1,22 +1,40 @@
 #include "Server.hpp"
+#include "ClientHandler.hpp" // Include here instead of in the header
+#include <arpa/inet.h>
+#include <iostream>
 
 Server::Server(int port) : _socket(port), _running(false) {
     if (getrlimit(RLIMIT_NOFILE, &_rlim) == -1) {
         throw std::runtime_error("Failed to get file descriptor limit");
     }
     std::cout << "System allows " << _rlim.rlim_cur << " file descriptors." << std::endl;
+    std::cout << "Server will listen on port " << port << std::endl;
+    
+    // Create the ClientHandler after initialization with all required parameters
+    // Use "./www" as default web root and 60 seconds as default timeout
+    _clientHandler = new ClientHandler(_connectionManager, "./www", 60);
 }
 
 Server::~Server() {
-    for (int fd : _clientFds)
-        if (close(fd) < 0)
-            std::cerr << "Failed to close client socket" << std::endl;
-    _clientFds.clear();
+    // Clean up the ClientHandler
+    delete _clientHandler;
 }
 
 void Server::acceptNewConnection() {
-    if (_clientFds.size() >= _rlim.rlim_cur - 10) //10 is for safety buffer
-        throw std::runtime_error("Max clients reached");
+    if (_clientHandler->getClients().size() >= _rlim.rlim_cur - 10) { //10 is for safety buffer
+        std::cerr << "Max clients reached" << std::endl;
+        // Accept but immediately close connection with error message
+        struct sockaddr_in client_addr;
+        socklen_t addr_len = sizeof(client_addr);
+        int client_fd = accept(_socket.getFd(), (struct sockaddr *)&client_addr, &addr_len);
+        
+        if (client_fd >= 0) {
+            // Send a service unavailable error response
+            _clientHandler->addClient(client_fd, client_addr);
+            _clientHandler->handleClientEvent(ClientHandler::ClientEventType::ERROR, client_fd);
+        }
+        return;
+    }
     
     struct sockaddr_in client_addr;
     socklen_t addr_len = sizeof(client_addr);
@@ -24,41 +42,27 @@ void Server::acceptNewConnection() {
 
     if (client_fd < 0) {
         if (errno != EAGAIN && errno != EWOULDBLOCK)
-            throw std::runtime_error("Failed to accept new connection");
+            throw SocketException("Failed to accept new connection: " + std::string(strerror(errno)));
         return;
     }
 
-    Socket::setNonBlocking(client_fd);
-    _clientFds.insert(client_fd);
-
-    char client_ip[INET_ADDRSTRLEN];
-    if (inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip)) == NULL)
-        throw std::runtime_error("Failed to convert client IP address");
-    std::cout << "New connection from " << client_ip << ":" << ntohs(client_addr.sin_port) << "fd: " << client_fd << std::endl;
-}
-
-void Server::disconnectClient(int client_fd) {
-    if (_clientFds.erase(client_fd) == 0)
-        throw std::runtime_error("Attempted to disconnect non-existent client");
-    if (close(client_fd) < 0)
-        throw std::runtime_error("Failed to close client socket");
-
-    std::cout << "Client disconnected, fd: " << client_fd << std::endl;
-}
-
-bool Server::hasClient(int client_fd) const {
-    return _clientFds.find(client_fd) != _clientFds.end();
-}
-
-// size_t Server::getClientCount() const {
-//     return _clientFds.size();
-// }
-
-const std::unordered_set<int>& Server::getClients() const {
-    return _clientFds;
+    try {
+        Socket::setNonBlocking(client_fd);
+        
+        // Add client using ClientHandler
+        _clientHandler->addClient(client_fd, client_addr);
+    } catch (const std::exception& e) {
+        // Close the socket if anything went wrong during setup
+        if (close(client_fd) < 0) {
+            std::cerr << "Failed to close client socket: " << strerror(errno) << std::endl;
+        }
+        throw; // Re-throw the exception
+    }
 }
 
 void Server::start() {
+    std::cout << "Server started, waiting for connections..." << std::endl;
+    
     _running = true;
 
     _socket.createSocket();
@@ -68,103 +72,54 @@ void Server::start() {
     Socket::setNonBlocking(_socket.getFd());
 
     _connectionManager.addConnection(_socket.getFd(), POLLIN);
-
-    while (_running) {
-        try {
-            std::vector<struct pollfd> active_fds = _connectionManager.checkConnection();
-
-            for (const auto& poll_fd : active_fds) {
-                if (_connectionManager.isServerSocket(poll_fd.fd) && _connectionManager.hasActivity(&poll_fd, POLLIN))
-                    acceptNewConnection();
-                else {
-                    if (_connectionManager.hasActivity(&poll_fd, POLLIN)) {
-                        handleClientRead(poll_fd.fd);
-                    }
-                    if (_connectionManager.hasActivity(&poll_fd, POLLOUT)) {
-                        handleClientWrite(poll_fd.fd);
-                    }
-                }
-            }
-        }
-        catch (const std::exception& e) {
-            std::cerr << "Error in event loop: " << e.what() << std::endl;
-            continue;
-        }
-    }
-    std::cout << "Server started, waiting for connections..." << std::endl;
 }
 
 void Server::stop() {
     _running = false;
-    for (int fd : _clientFds) {
-        if (close(fd) < 0)
-            throw std::runtime_error("Failed to close client socket");
+    
+    // First disconnect all clients
+    // Get a copy of client file descriptors to avoid modification during iteration
+    const std::unordered_set<int> clients = _clientHandler->getClients();
+    std::vector<int> clientFds(clients.begin(), clients.end());
+    
+    for (size_t i = 0; i < clientFds.size(); i++) {
+        try {
+            _clientHandler->disconnectClient(clientFds[i]);
+        } catch (const std::exception& e) {
+            std::cerr << "Error disconnecting client: " << e.what() << std::endl;
+        }
     }
-    _clientFds.clear();
+    
+    // Remove the server socket from the connection manager
+    _connectionManager.removeConnection(_socket.getFd());
+    
+    // Close the server socket
+    try {
+        _socket.closeSocket();
+    } catch (const std::exception& e) {
+        std::cerr << "Error closing server socket: " << e.what() << std::endl;
+    }
+    
     std::cout << "Server stopped." << std::endl;
 }
 
-void Server::handleClientRead(int client_fd){
-    char buffer[4096]; // can be adjusted based on expected message size
-
-    ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer));
-
-    if (bytes_read < 0) {
-        if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            disconnectClient(client_fd);
-            throw std::runtime_error("Failed to read from client socket");
-        }
+// Check for client timeouts
+void Server::checkClientTimeouts() {
+    if (_clientHandler) {
+        _clientHandler->checkTimeouts();
     }
-    if (bytes_read == 0) {
-        std::cout << "Client " << client_fd << " disconnected." << std::endl;
-        disconnectClient(client_fd);
-        return;
-    }
-
-    _incomingData[client_fd].append(buffer, bytes_read);
-    std::cout << "Received data from client " << client_fd << ": " << _incomingData[client_fd] << std::endl;
- 
-    _incomingData[client_fd].clear(); // clear buffer after processing
- 
-    /*
-        check http request
-        parse http request
-        get http response
-        save http response to _outgoingData[client_fd]
-        clear _incomingData[client_fd]
-        remove the connectoin than add client_fd to _connectionManager with POLLOUT for writing
-        handle error
-    */
 }
 
-void Server::handleClientWrite(int client_fd) {
-    if (_outgoingData.find(client_fd) == _outgoingData.end() || _outgoingData[client_fd].empty())
-        return;
+// Implement the methods that delegate to ClientHandler
+void Server::handleClientRead(int clientFd) {
+    _clientHandler->handleClientRead(clientFd);
+}
 
-    std::string& data = _outgoingData[client_fd];
+void Server::handleClientWrite(int clientFd) {
+    _clientHandler->handleClientWrite(clientFd);
+}
 
-    ssize_t bytes_written = write(client_fd, data.c_str(), data.size());
-
-    if (bytes_written < 0) {
-        if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            disconnectClient(client_fd);
-            throw std::runtime_error("Failed to write to client socket");
-        }
-        return;
-    }
-    if (bytes_written == 0) {
-        std::cout << "Client " << client_fd << " disconnected." << std::endl;
-        disconnectClient(client_fd);
-        return;
-    }
-
-    data.erase(0, bytes_written);
-    _connectionManager.removeConnection(client_fd); 
-    if (!data.empty())
-        _connectionManager.addConnection(client_fd, POLLOUT);
-    else {
-        _outgoingData.erase(client_fd);
-        _connectionManager.addConnection(client_fd, POLLIN);
-        std::cout << "Data sent to client " << client_fd << std::endl;
-    }
+// Implement the hasClient method
+bool Server::hasClient(int fd) const {
+    return _clientHandler->hasClient(fd);
 }
