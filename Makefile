@@ -5,10 +5,11 @@ CXXFLAGS = -std=c++17 -Wall -Wextra -Werror -g3
 
 SRC_DIR = src
 OBJ_DIR = obj
-INCLUDES = -I ./inc -I ./inc/server -I ./inc/HTTP -I ./inc/config
+INCLUDES = -I ./inc -I ./inc/server -I ./inc/HTTP -I ./inc/config -I ./inc/resource -I ./inc/errors
 
 SRCS = $(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(SRC_DIR)/server/*.cpp) \
-		$(wildcard $(SRC_DIR)/HTTP/*.cpp) $(wildcard $(SRC_DIR)/config/*.cpp)
+		$(wildcard $(SRC_DIR)/HTTP/*.cpp) $(wildcard $(SRC_DIR)/config/*.cpp) $(wildcard $(SRC_DIR)/resource/*.cpp) \
+		$(wildcard $(SRC_DIR)/errors/*.cpp)
 OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
 
 all: $(NAME)

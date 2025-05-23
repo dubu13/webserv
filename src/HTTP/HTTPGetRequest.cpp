@@ -1,5 +1,5 @@
-#include "HTTPGetRequest.hpp"
-#include "IHTTPRequest.hpp"
+#include "HTTP/HTTPGetRequest.hpp"
+#include "HTTP/IHTTPRequest.hpp"
 #include <iostream>
 
 HTTPGetRequest::HTTPGetRequest() = default;

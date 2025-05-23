@@ -1,14 +1,7 @@
 #include "Server.hpp"
+#include "ClientHandler.hpp" // Include here instead of in the header
 #include <arpa/inet.h>
-
-// Add these includes
-#include "HTTP/IHTTPRequest.hpp"
-#include "HTTP/HTTPResponse.hpp"
-#include "HTTP/HTTPTypes.hpp"
-#include "FileType.hpp"  // Add this at the top with your other includes
-#include <fstream>
-#include <vector>
-#include <algorithm>
+#include <iostream>
 
 Server::Server(int port) : _socket(port), _running(false) {
     if (getrlimit(RLIMIT_NOFILE, &_rlim) == -1) {
@@ -16,18 +9,32 @@ Server::Server(int port) : _socket(port), _running(false) {
     }
     std::cout << "System allows " << _rlim.rlim_cur << " file descriptors." << std::endl;
     std::cout << "Server will listen on port " << port << std::endl;
+    
+    // Create the ClientHandler after initialization with all required parameters
+    // Use "./www" as default web root and 60 seconds as default timeout
+    _clientHandler = new ClientHandler(_connectionManager, "./www", 60);
 }
 
 Server::~Server() {
-    for (int fd : _clientFds)
-        if (close(fd) < 0)
-            std::cerr << "Failed to close client socket" << std::endl;
-    _clientFds.clear();
+    // Clean up the ClientHandler
+    delete _clientHandler;
 }
 
 void Server::acceptNewConnection() {
-    if (_clientFds.size() >= _rlim.rlim_cur - 10) //10 is for safety buffer
-        throw std::runtime_error("Max clients reached");
+    if (_clientHandler->getClients().size() >= _rlim.rlim_cur - 10) { //10 is for safety buffer
+        std::cerr << "Max clients reached" << std::endl;
+        // Accept but immediately close connection with error message
+        struct sockaddr_in client_addr;
+        socklen_t addr_len = sizeof(client_addr);
+        int client_fd = accept(_socket.getFd(), (struct sockaddr *)&client_addr, &addr_len);
+        
+        if (client_fd >= 0) {
+            // Send a service unavailable error response
+            _clientHandler->addClient(client_fd, client_addr);
+            _clientHandler->handleClientEvent(ClientHandler::ClientEventType::ERROR, client_fd);
+        }
+        return;
+    }
     
     struct sockaddr_in client_addr;
     socklen_t addr_len = sizeof(client_addr);
@@ -35,49 +42,22 @@ void Server::acceptNewConnection() {
 
     if (client_fd < 0) {
         if (errno != EAGAIN && errno != EWOULDBLOCK)
-            throw std::runtime_error("Failed to accept new connection");
+            throw SocketException("Failed to accept new connection: " + std::string(strerror(errno)));
         return;
     }
 
-    Socket::setNonBlocking(client_fd);
-    _clientFds.insert(client_fd);
-    
-    // Add new client to poll monitoring
-    _connectionManager.addConnection(client_fd, POLLIN);
-    
-    char client_ip[INET_ADDRSTRLEN];
-    if (inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip)) == NULL)
-        throw std::runtime_error("Failed to convert client IP address");
-    std::cout << "New connection from " << client_ip << ":" << ntohs(client_addr.sin_port) << " fd: " << client_fd << std::endl;
-}
-
-void Server::disconnectClient(int client_fd) {
-    // Remove from connection manager first
-    _connectionManager.removeConnection(client_fd);
-    
-    // Clean up data structures
-    _incomingData.erase(client_fd);
-    _outgoingData.erase(client_fd);
-    
-    // Remove from client set and close
-    if (_clientFds.erase(client_fd) == 0)
-        throw std::runtime_error("Attempted to disconnect non-existent client");
-    if (close(client_fd) < 0)
-        throw std::runtime_error("Failed to close client socket");
-
-    std::cout << "Client disconnected, fd: " << client_fd << std::endl;
-}
-
-bool Server::hasClient(int client_fd) const {
-    return _clientFds.find(client_fd) != _clientFds.end();
-}
-
-// size_t Server::getClientCount() const {
-//     return _clientFds.size();
-// }
-
-const std::unordered_set<int>& Server::getClients() const {
-    return _clientFds;
+    try {
+        Socket::setNonBlocking(client_fd);
+        
+        // Add client using ClientHandler
+        _clientHandler->addClient(client_fd, client_addr);
+    } catch (const std::exception& e) {
+        // Close the socket if anything went wrong during setup
+        if (close(client_fd) < 0) {
+            std::cerr << "Failed to close client socket: " << strerror(errno) << std::endl;
+        }
+        throw; // Re-throw the exception
+    }
 }
 
 void Server::start() {
@@ -96,213 +76,50 @@ void Server::start() {
 
 void Server::stop() {
     _running = false;
-    for (int fd : _clientFds) {
-        if (close(fd) < 0)
-            throw std::runtime_error("Failed to close client socket");
+    
+    // First disconnect all clients
+    // Get a copy of client file descriptors to avoid modification during iteration
+    const std::unordered_set<int> clients = _clientHandler->getClients();
+    std::vector<int> clientFds(clients.begin(), clients.end());
+    
+    for (size_t i = 0; i < clientFds.size(); i++) {
+        try {
+            _clientHandler->disconnectClient(clientFds[i]);
+        } catch (const std::exception& e) {
+            std::cerr << "Error disconnecting client: " << e.what() << std::endl;
+        }
     }
-    _clientFds.clear();
+    
+    // Remove the server socket from the connection manager
+    _connectionManager.removeConnection(_socket.getFd());
+    
+    // Close the server socket
+    try {
+        _socket.closeSocket();
+    } catch (const std::exception& e) {
+        std::cerr << "Error closing server socket: " << e.what() << std::endl;
+    }
+    
     std::cout << "Server stopped." << std::endl;
 }
 
-void Server::handleClientRead(int client_fd) {
-    char buffer[4096] = {0}; // Initialize buffer to zeros
-    
-    ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
-    std::cout << "Read " << bytes_read << " bytes from client " << client_fd << std::endl;
-
-    if (bytes_read < 0) {
-        if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            disconnectClient(client_fd);
-            throw std::runtime_error("Failed to read from client socket");
-        }
-        return;
-    }
-    
-    if (bytes_read == 0) {
-        std::cout << "Client " << client_fd << " disconnected." << std::endl;
-        disconnectClient(client_fd);
-        return;
-    }
-
-    // Ensure null termination
-    buffer[bytes_read] = '\0';
-    
-    // Append to the incoming data buffer
-    _incomingData[client_fd].append(buffer, bytes_read);
-    
-    // Check if we have a complete HTTP request
-    if (_incomingData[client_fd].find("\r\n\r\n") != std::string::npos) {
-        std::cout << "Complete HTTP request received" << std::endl;
-        
-        try {
-            // Parse the request using your IHTTPRequest interface
-            auto request = IHTTPRequest::createRequest(_incomingData[client_fd]);
-            
-            if (request) {
-                std::cout << "Processing " << HTTP::methodToString(request->getMethod()) 
-                         << " request for URI: " << request->getUri() << std::endl;
-                
-                // Check method and route request appropriately
-                if (request->getMethod() == HTTP::Method::GET) {
-                    handleGETRequest(client_fd, *request);
-                } else {
-                    // Respond with 501 Not Implemented for other methods
-                    auto response = HTTPResponse::createResponse();
-                    response->setStatus(HTTP::StatusCode::METHOD_NOT_ALLOWED);
-                    response->setContentType("text/html");
-                    response->setBody("<html><body><h1>Method Not Allowed</h1><p>Only GET is currently supported</p></body></html>");
-                    
-                    // Store the response for sending
-                    _outgoingData[client_fd] = response->generateResponse();
-                    
-                    // Switch to write mode
-                    _connectionManager.removeConnection(client_fd);
-                    _connectionManager.addConnection(client_fd, POLLOUT);
-                }
-            } else {
-                // Bad request - couldn't parse
-                auto response = HTTPResponse::createResponse();
-                response->setStatus(HTTP::StatusCode::BAD_REQUEST);
-                response->setContentType("text/html");
-                response->setBody("<html><body><h1>400 Bad Request</h1><p>Invalid HTTP request format</p></body></html>");
-                
-                _outgoingData[client_fd] = response->generateResponse();
-                _connectionManager.removeConnection(client_fd);
-                _connectionManager.addConnection(client_fd, POLLOUT);
-            }
-        }
-        catch (const std::exception& e) {
-            // Server error handling
-            auto response = HTTPResponse::createResponse();
-            response->setStatus(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
-            response->setContentType("text/html");
-            response->setBody("<html><body><h1>500 Internal Server Error</h1><p>" + std::string(e.what()) + "</p></body></html>");
-            
-            _outgoingData[client_fd] = response->generateResponse();
-            _connectionManager.removeConnection(client_fd);
-            _connectionManager.addConnection(client_fd, POLLOUT);
-        }
-        
-        // Clear the incoming data buffer
-        _incomingData[client_fd].clear();
+// Check for client timeouts
+void Server::checkClientTimeouts() {
+    if (_clientHandler) {
+        _clientHandler->checkTimeouts();
     }
 }
 
-void Server::handleClientWrite(int client_fd) {
-    if (_outgoingData.find(client_fd) == _outgoingData.end() || _outgoingData[client_fd].empty())
-        return;
-
-    std::string& data = _outgoingData[client_fd];
-
-    ssize_t bytes_written = write(client_fd, data.c_str(), data.size());
-
-    if (bytes_written < 0) {
-        if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            disconnectClient(client_fd);
-            throw std::runtime_error("Failed to write to client socket");
-        }
-        return;
-    }
-    if (bytes_written == 0) {
-        std::cout << "Client " << client_fd << " disconnected." << std::endl;
-        disconnectClient(client_fd);
-        return;
-    }
-
-    data.erase(0, bytes_written);
-    _connectionManager.removeConnection(client_fd); 
-    if (!data.empty())
-        _connectionManager.addConnection(client_fd, POLLOUT);
-    else {
-        _outgoingData.erase(client_fd);
-        _connectionManager.addConnection(client_fd, POLLIN);
-        std::cout << "Data sent to client " << client_fd << std::endl;
-    }
+// Implement the methods that delegate to ClientHandler
+void Server::handleClientRead(int clientFd) {
+    _clientHandler->handleClientRead(clientFd);
 }
 
-// Helper function to check if string ends with a suffix (C++17 compatible)
-bool endsWith(const std::string& str, const std::string& suffix) {
-    if (str.length() < suffix.length()) {
-        return false;
-    }
-    return str.compare(str.length() - suffix.length(), suffix.length(), suffix) == 0;
+void Server::handleClientWrite(int clientFd) {
+    _clientHandler->handleClientWrite(clientFd);
 }
 
-void Server::handleGETRequest(int client_fd, const IHTTPRequest& request) {
-    std::string uri = request.getUri();
-    
-    // Default to index.html for root path
-    if (uri == "/") {
-        uri = "/index.html";
-    }
-    
-    // Try to serve file from www directory
-    std::string filePath = "./www" + uri;
-    
-    auto response = HTTPResponse::createResponse();
-    
-    // Check if this is a CGI request
-    if (FileType::isCGI(filePath)) {
-        // Will implement CGI execution later
-        std::string handler = FileType::getCGIHandler(filePath);
-        if (!handler.empty()) {
-            // TODO: Handle CGI execution
-            // For now, just return not implemented
-            response->setStatus(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
-            response->setContentType("text/html");
-            response->setBody("<html><body><h1>CGI Not Yet Implemented</h1></body></html>");
-        } else {
-            // CGI handler not found
-            response->setStatus(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
-            response->setContentType("text/html");
-            response->setBody("<html><body><h1>500 Internal Server Error</h1><p>No CGI handler available</p></body></html>");
-        }
-    } else {
-        // Not a CGI file - serve the static file
-        std::ifstream file(filePath, std::ios::binary | std::ios::ate);
-        
-        if (file.is_open()) {
-            // File exists - prepare to send it
-            std::streamsize size = file.tellg();
-            file.seekg(0, std::ios::beg);
-            
-            std::vector<char> buffer(size);
-            if (file.read(buffer.data(), size)) {
-                // Set content type based on file extension
-                std::string contentType = FileType::getMimeType(filePath);
-                
-                response->setStatus(HTTP::StatusCode::OK);
-                response->setContentType(contentType);
-                response->setBody(std::string(buffer.data(), size));
-            } else {
-                // Error reading file
-                response->setStatus(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
-                response->setContentType("text/html");
-                response->setBody("<html><body><h1>500 Internal Server Error</h1><p>Error reading file</p></body></html>");
-            }
-        } else {
-            // File not found - return 404
-            response->setStatus(HTTP::StatusCode::NOT_FOUND);
-            response->setContentType("text/html");
-            
-            // Try to load custom 404 page
-            std::ifstream errorFile("./www/errors/404.html");
-            if (errorFile.is_open()) {
-                std::string errorContent((std::istreambuf_iterator<char>(errorFile)),
-                                        std::istreambuf_iterator<char>());
-                response->setBody(errorContent);
-            } else {
-                // Fallback 404 page
-                response->setBody("<html><body><h1>404 Not Found</h1><p>The requested resource was not found on this server</p></body></html>");
-            }
-        }
-    }
-    
-    // Add common headers
-    response->setHeader("Connection", "close");
-    
-    // Send the response
-    _outgoingData[client_fd] = response->generateResponse();
-    _connectionManager.removeConnection(client_fd);
-    _connectionManager.addConnection(client_fd, POLLOUT);
+// Implement the hasClient method
+bool Server::hasClient(int fd) const {
+    return _clientHandler->hasClient(fd);
 }

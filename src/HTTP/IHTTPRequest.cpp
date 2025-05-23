@@ -1,5 +1,8 @@
 #include "IHTTPRequest.hpp"
 #include "HTTPGetRequest.hpp"
+#include "HTTPPostRequest.hpp"
+#include "HTTPDeleteRequest.hpp"
+#include "HTTPTypes.hpp"
 #include <iostream>
 
 HTTPParseException::HTTPParseException(const std::string &message)
@@ -60,28 +63,31 @@ IHTTPRequest::parseHeaders(const std::string &headerSection) {
 std::unique_ptr<IHTTPRequest>
 IHTTPRequest::createRequest(const std::string &requestData) {
   try {
+    // Determine HTTP method from request
     size_t endOfLine = requestData.find("\r\n");
-    if (endOfLine == std::string::npos) {
-      throw HTTPParseException("Invalid request format: no CRLF found");
-    }
+    if (endOfLine != std::string::npos) {
+      std::string requestLine = requestData.substr(0, endOfLine);
+      size_t firstSpace = requestLine.find(' ');
+      if (firstSpace != std::string::npos) {
+        std::string methodStr = requestLine.substr(0, firstSpace);
 
-    std::string requestLine = requestData.substr(0, endOfLine);
-    size_t firstSpace = requestLine.find(' ');
-    if (firstSpace == std::string::npos) {
-      throw HTTPParseException("Invalid request line: no method found");
-    }
+        std::unique_ptr<IHTTPRequest> request;
+        if (methodStr == "GET") {
+          request = std::make_unique<HTTPGetRequest>();
+        } else if (methodStr == "POST") {
+          request = std::make_unique<HTTPPostRequest>();
+        } else if (methodStr == "DELETE") {
+          request = std::make_unique<HTTPDeleteRequest>();
+        } else {
+          throw HTTPParseException("Unsupported HTTP method: " + methodStr);
+        }
 
-    std::string methodStr = requestLine.substr(0, firstSpace);
-    if (methodStr == "GET") {
-      auto request = std::make_unique<HTTPGetRequest>();
-      if (request->parseRequest(requestData))
-        return request;
-    } else
-      throw HTTPParseException("Unsupported HTTP method: " + methodStr);
+        if (request && request->parseRequest(requestData))
+          return request;
+      }
+    }
   } catch (const HTTPParseException &e) {
     std::cerr << "Error creating request: " << e.what() << std::endl;
-  } catch (const std::exception &e) {
-    std::cerr << "Unexpected error creating request: " << e.what() << std::endl;
   }
   return nullptr;
 }

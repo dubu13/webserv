@@ -1,4 +1,4 @@
-#include "FileType.hpp"
+#include "HTTP/FileType.hpp"
 #include <algorithm>
 
 // Initialize static members with common MIME types
@@ -22,8 +22,11 @@ std::unordered_map<std::string, std::string> FileType::_mimeTypes = {
 // Initialize CGI handlers
 std::unordered_map<std::string, std::string> FileType::_cgiHandlers = {
     {"php", "/usr/bin/php-cgi"},
-    {"py", "/usr/bin/python"},
-    {"pl", "/usr/bin/perl"}
+    {"py", "/usr/bin/python3"},
+    {"pl", "/usr/bin/perl"},
+    {"rb", "/usr/bin/ruby"},
+    {"sh", "/usr/bin/bash"},
+    {"js", "/home/dkremer/.nvm/versions/node/v22.14.0/bin/node"}
 };
 
 std::string FileType::getMimeType(const std::string& path) {

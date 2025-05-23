@@ -7,38 +7,33 @@
 #include <fcntl.h> // for fcntl
 #include <unistd.h> // for close
 #include <unordered_map>
+#include <netinet/in.h> // for sockaddr_in
 
-// Forward declaration of the IHTTPRequest class
-class IHTTPRequest;
+// Forward declaration to break circular dependency
+class ClientHandler;
 
 class Server {
-    private:
-        Socket _socket;
-        ConnectionManager _connectionManager;
-        std::unordered_set<int> _clientFds;
-        std::unordered_map<int, std::string> _incomingData; // incoming data from clients
-        std::unordered_map<int, std::string> _outgoingData; // outgoing data from clients
-        rlimit _rlim;
-        bool _running;
+private:
+    Socket _socket;
+    ConnectionManager _connectionManager;
+    ClientHandler* _clientHandler;
+    rlimit _rlim;
+    bool _running;
 
-    public:
-        Server(int port = 8080);
-        ~Server();
+public:
+    Server(int port = 8080);
+    ~Server();
 
-        void acceptNewConnection();
-        void disconnectClient(int client_fd);
-        bool hasClient(int client_fd) const;
-        // size_t getClientCount() const;
-        const std::unordered_set<int>& getClients() const;
-        void start();
-        void stop();
-
-        // client data handling
-        void handleClientRead(int client_fd);
-        void handleClientWrite(int client_fd);
-        void handleGETRequest(int client_fd, const IHTTPRequest& request);
-
-        int getSocketFd() const { return _socket.getFd(); }
-        ConnectionManager& getConnectionManager() { return _connectionManager; }
-        bool isServerSocket(int fd) const { return fd == _socket.getFd(); }
+    void start();
+    void stop();
+    void acceptNewConnection();
+    void checkClientTimeouts();  // Added declaration
+    
+    int getSocketFd() const { return _socket.getFd(); }
+    ConnectionManager& getConnectionManager() { return _connectionManager; }
+    bool isServerSocket(int fd) const { return fd == _socket.getFd(); }
+    
+    // These methods now delegate to ClientHandler
+    void handleClientRead(int clientFd);
+    void handleClientWrite(int clientFd);
 };

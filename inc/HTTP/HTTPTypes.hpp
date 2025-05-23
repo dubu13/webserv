@@ -2,6 +2,7 @@
 
 #include <string>
 #include <map>
+#include <iostream>
 
 namespace HTTP {
     // HTTP Methods
@@ -17,7 +18,8 @@ namespace HTTP {
         BAD_REQUEST = 400,
         NOT_FOUND = 404,
         METHOD_NOT_ALLOWED = 405,
-        INTERNAL_SERVER_ERROR = 500
+        INTERNAL_SERVER_ERROR = 500,
+        NOT_IMPLEMENTED = 501
     };
     
     // HTTP Version
@@ -43,4 +45,16 @@ namespace HTTP {
     bool isValidMethod(const std::string& method);
     bool isValidUri(const std::string& uri);
     bool isValidVersion(const std::string& version);
+}
+
+// Stream operator for HTTP::Method
+inline std::ostream& operator<<(std::ostream& os, const HTTP::Method& method) {
+    os << HTTP::methodToString(method);
+    return os;
+}
+
+// Stream operator for HTTP::StatusCode
+inline std::ostream& operator<<(std::ostream& os, const HTTP::StatusCode& status) {
+    os << static_cast<int>(status) << " " << HTTP::statusToString(status);
+    return os;
 }

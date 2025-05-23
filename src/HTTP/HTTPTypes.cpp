@@ -1,4 +1,4 @@
-#include "HTTPTypes.hpp"
+#include "HTTP/HTTPTypes.hpp"
 #include <stdexcept>
 
 namespace HTTP {

@@ -3,7 +3,7 @@
 
 ServerConfig::ServerConfig()
     : host("localhost"), port(8080), root("./www"),
-      client_max_body_size(1024 * 1024) {} // 1 MB default
+      client_max_body_size(1024 * 1024) {
 
 bool ServerConfig::matchesHost(const std::string &host) const {
   if (server_name.empty()) {
@@ -13,11 +13,33 @@ bool ServerConfig::matchesHost(const std::string &host) const {
          server_name.end();
 }
 
-const LocationConfig *ServerConfig::getLocation(const std::string &path) const {
-  for (const auto &location : locations) {
-    if (path.find(location.first) == 0) {
-      return &location.second;
-    }
+void ServerConfig::handleServerDirective(ServerDirective type, std::istringstream& iss) {
+  std::string value;
+
+  switch(type) {
+      case ServerDirective::PORT:
+          iss >> port;
+          break;
+      case ServerDirective::HOST:
+          iss >> host;
+          break;
+      case ServerDirective::SERVER_NAME:
+          iss >> server_name;
+          break;
+      case ServerDirective::ROOT:
+          iss >> root;
+          break;
+      case ServerDirective::ERROR_PAGES: {
+          int error_code;
+          std::string path;
+          iss >> error_code >> path;
+          error_pages[error_code] = path;
+          break;
+      }
+      case ServerDirective::CLIENT_MAX_BODY_SIZE:
+          iss >> client_max_body_size;
+          break;
+      default:
+          throw std::runtime_error("Unknown directive");
   }
-  return nullptr; // No matching location found
 }
