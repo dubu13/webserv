@@ -1,4 +1,4 @@
-#include "ResourceHandler.hpp"
+#include "resource/ResourceHandler.hpp"
 #include <fstream>
 #include <vector>
 #include <iostream>

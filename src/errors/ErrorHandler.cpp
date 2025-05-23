@@ -1,4 +1,4 @@
-#include "ErrorHandler.hpp"
+#include "errors/ErrorHandler.hpp"
 #include <fstream>
 #include <iostream>
 #include <sstream>

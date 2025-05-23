@@ -1,5 +1,5 @@
-#include "HTTPDeleteRequest.hpp"
-#include "IHTTPRequest.hpp"
+#include "HTTP/HTTPDeleteRequest.hpp"
+#include "HTTP/IHTTPRequest.hpp"
 #include <iostream>
 
 HTTPDeleteRequest::HTTPDeleteRequest() = default;

@@ -1,5 +1,5 @@
-#include "HTTPPostRequest.hpp"
-#include "IHTTPRequest.hpp"
+#include "HTTP/HTTPPostRequest.hpp"
+#include "HTTP/IHTTPRequest.hpp"
 #include <iostream>
 
 HTTPPostRequest::HTTPPostRequest() = default;
@@ -28,28 +28,10 @@ bool HTTPPostRequest::parseRequest(const std::string &data) {
 
     _headers = parseHeaders(data.substr(headerStart, headerEnd - headerStart));
 
-    // Extract body
+    // Extract body - everything after the headers
     size_t bodyStart = headerEnd + 4; // Skip the \r\n\r\n
     if (bodyStart < data.length()) {
       _body = data.substr(bodyStart);
-      
-      // Handle Content-Length if present
-      auto contentLengthIt = _headers.find("Content-Length");
-      if (contentLengthIt != _headers.end()) {
-        try {
-          size_t contentLength = std::stoul(contentLengthIt->second);
-          // If we received less data than Content-Length indicates, the request is incomplete
-          if (_body.length() < contentLength) {
-            return false; // Need more data
-          }
-          // Trim any extra data beyond Content-Length
-          if (_body.length() > contentLength) {
-            _body = _body.substr(0, contentLength);
-          }
-        } catch (const std::exception &e) {
-          std::cerr << "Error parsing Content-Length: " << e.what() << std::endl;
-        }
-      }
     }
 
     return true;
