@@ -1,0 +1,273 @@
+/* Common styles for all script language pages */
+:root {
+    --primary-color: #3498db;
+    --secondary-color: #2ecc71;
+    --accent-color: #e74c3c;
+    --light-bg: #f8f9fa;
+    --dark-bg: #343a40;
+    --text-color: #333;
+    --light-border: #dee2e6;
+    
+    /* Language-specific colors */
+    --ruby-color: #CC342D;
+    --python-color: #3776AB;
+    --perl-color: #39457E;
+    --bash-color: #3E474A;
+    --nodejs-color: #3C873A;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
+    color: var(--text-color);
+    background-color: var(--light-bg);
+    padding: 20px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.header {
+    text-align: center;
+    padding: 30px 20px;
+    margin-bottom: 30px;
+    color: white;
+    border-radius: 10px;
+    position: relative;
+    overflow: hidden;
+}
+
+.header h1 {
+    font-size: 2.2em;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+}
+
+.header p {
+    font-size: 1.2em;
+}
+
+.language-logo {
+    width: 48px;
+    height: 48px;
+}
+
+/* Language-specific header styles */
+.ruby {
+    background: linear-gradient(135deg, var(--ruby-color), #E83E8C);
+}
+
+.python {
+    background: linear-gradient(135deg, var(--python-color), #2196F3);
+}
+
+.perl {
+    background: linear-gradient(135deg, var(--perl-color), #7952B3);
+}
+
+.bash {
+    background: linear-gradient(135deg, var(--bash-color), #6C757D);
+}
+
+.nodejs {
+    background: linear-gradient(135deg, var(--nodejs-color), #7CB701);
+}
+
+.card {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin-bottom: 30px;
+    padding: 25px;
+}
+
+.card h2 {
+    color: var(--dark-bg);
+    font-size: 1.6em;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--light-border);
+}
+
+.card h3 {
+    color: var(--text-color);
+    font-size: 1.3em;
+    margin: 20px 0 15px;
+}
+
+.card h4 {
+    font-size: 1.1em;
+    margin: 15px 0 10px;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 15px;
+}
+
+.info-item {
+    background-color: var(--light-bg);
+    border-radius: 6px;
+    padding: 15px;
+}
+
+.info-label {
+    font-weight: bold;
+    color: var(--dark-bg);
+    margin-bottom: 8px;
+    font-size: 0.9em;
+}
+
+.info-value {
+    font-family: monospace;
+    font-size: 1.1em;
+}
+
+.terminal {
+    background-color: var(--dark-bg);
+    border-radius: 6px;
+    padding: 15px;
+    color: white;
+    font-family: monospace;
+    overflow-x: auto;
+}
+
+.terminal pre {
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+.code-block {
+    background-color: var(--dark-bg);
+    color: white;
+    border-radius: 6px;
+    padding: 15px;
+    font-family: monospace;
+    overflow-x: auto;
+    white-space: pre;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+table th, table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--light-border);
+}
+
+table th {
+    background-color: var(--light-bg);
+    font-weight: bold;
+}
+
+table tr:nth-child(even) {
+    background-color: var(--light-bg);
+}
+
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: var(--light-bg);
+    border-radius: 6px;
+}
+
+.controls label {
+    font-weight: bold;
+    margin-right: 5px;
+}
+
+.controls input[type="range"] {
+    flex: 1;
+}
+
+button {
+    padding: 10px 20px;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #2980b9;
+}
+
+.category-item {
+    margin-bottom: 15px;
+}
+
+.category-name {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.footer {
+    text-align: center;
+    padding: 20px;
+    margin-top: 30px;
+    color: #666;
+    border-top: 1px solid var(--light-border);
+}
+
+/* Highlight styles for code */
+.highlight-keyword {
+    color: #569CD6;
+}
+
+.highlight-string {
+    color: #CE9178;
+}
+
+.highlight-comment {
+    color: #608B4E;
+}
+
+.highlight-number {
+    color: #B5CEA8;
+}
+
+.highlight-function {
+    color: #DCDCAA;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+    .info-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .card {
+        padding: 15px;
+    }
+}

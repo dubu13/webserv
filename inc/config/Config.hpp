@@ -1,11 +1,19 @@
 #pragma once
 #include "ServerConfig.hpp"
-#include <vector>
+#include <unordered_map>
+#include <string>
+#include <sstream>
+#include <fstream>
 
 class Config {
-public:
-  std::vector<ServerConfig> servers;
+  private:
 
-  const ServerConfig &resolveServer(const std::string &host, int port,
-                                    const std::string &hostHeader) const;
+      std::string _fileName;
+      std::unordered_map<std::string, ServerConfig> _servers;
+
+  public:
+      Config(const std::string &fileName);
+      std::unordered_map<std::string, ServerConfig>& parseConfig();
+    // const ServerConfig &resolveServer(const std::string &host, int port,
+    //                                   const std::string &hostHeader) const;
 };
