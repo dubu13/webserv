@@ -1,7 +1,7 @@
 #pragma once
 
-#include "HTTPResponse.hpp"
-#include "HTTPTypes.hpp"
+#include "HTTP/HTTPResponse.hpp"
+#include "HTTP/HTTPTypes.hpp"
 #include <string>
 #include <memory>
 #include <map>

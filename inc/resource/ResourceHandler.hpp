@@ -1,8 +1,8 @@
 #pragma once
 
-#include "ErrorHandler.hpp"
-#include "FileType.hpp"
-#include "HTTPResponse.hpp"
+#include "errors/ErrorHandler.hpp"
+#include "HTTP/FileType.hpp"
+#include "HTTP/HTTPResponse.hpp"
 #include <memory>
 #include <string>
 

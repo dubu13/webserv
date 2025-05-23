@@ -1,11 +1,11 @@
 #pragma once
 
-#include "CGIHandler.hpp"
-#include "ErrorHandler.hpp"
-#include "HTTPResponse.hpp"
-#include "HTTPTypes.hpp"
-#include "IHTTPRequest.hpp"
-#include "ResourceHandler.hpp"
+#include "resource/CGIHandler.hpp"
+#include "errors/ErrorHandler.hpp"
+#include "HTTP/HTTPResponse.hpp"
+#include "HTTP/HTTPTypes.hpp"
+#include "HTTP/IHTTPRequest.hpp"
+#include "resource/ResourceHandler.hpp"
 #include <ctime>
 #include <fstream>
 #include <functional>
@@ -25,6 +25,8 @@ private:
   ResourceHandler _resourceHandler;
   CGIHandler _cgiHandler;
 
+  std::string sanitizeFilename(const std::string &filename);
+  std::string extractFilenameFromRequest(const IHTTPRequest &request);
 
 public:
   HTTPHandler(const std::string &root = "./www");
