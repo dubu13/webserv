@@ -1,11 +1,8 @@
 #pragma once
-
 #include "HTTPTypes.hpp"
 #include <map>
 #include <memory>
-#include <optional>
 #include <string>
-#include <string_view>
 
 class HTTPResponse {
 private:
@@ -16,23 +13,18 @@ private:
   size_t _content_length;
 
 public:
-  HTTPResponse() noexcept;
-  // Setters
-  void setStatus(HTTP::StatusCode status) noexcept;
-  void setVersion(HTTP::Version version) noexcept;
-  void setHeader(std::string_view key, std::string_view value);
-  void setBody(std::string_view body);
-  void setContentType(std::string_view type);
-  void setContentLength(size_t length) noexcept;
-  // Getters
-  HTTP::StatusCode getStatus() const noexcept;
-  HTTP::Version getVersion() const noexcept;
-  std::optional<std::string_view>
-  getHeader(std::string_view key) const noexcept;
-  std::map<std::string, std::string> getHeaders() const noexcept;
-  std::string_view getBody() const noexcept;
-  size_t getContentLength() const noexcept;
-
+  HTTPResponse();
+  void setStatus(HTTP::StatusCode status);
+  void setVersion(HTTP::Version version);
+  void setHeader(const std::string& key, const std::string& value);
+  void setBody(const std::string& body);
+  void setContentType(const std::string& type);
+  void setContentLength(size_t length);
+  HTTP::StatusCode getStatus() const;
+  HTTP::Version getVersion() const;
+  std::string getHeader(const std::string& key) const;
+  std::map<std::string, std::string> getHeaders() const;
+  std::string getBody() const;
+  size_t getContentLength() const;
   std::string generateResponse() const;
-  static std::unique_ptr<HTTPResponse> createResponse() noexcept;
 };

@@ -1,55 +1,39 @@
 #pragma once
-
-#include "ConnectionManager.hpp"
 #include "HTTPHandler.hpp"
-#include "ResourceHandler.hpp"
-#include <functional>
+#include "Client.hpp"
 #include <map>
 #include <memory>
 #include <netinet/in.h>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
-
+#include <ctime>
+#include <vector>
+class Server;
 class ClientHandler {
 public:
   enum class ClientEventType { READ, WRITE, ERROR, TIMEOUT };
-
 private:
-  typedef void (ClientHandler::*EventHandlerFunction)(int);
-
-  ConnectionManager &_connectionManager;
-  std::unordered_set<int> _clientFds;
-  std::unordered_map<int, std::string> _incomingData;
-  std::unordered_map<int, std::string> _outgoingData;
+  Server &_server;
+  std::map<int, Client> _clients;
   HTTPHandler _httpHandler;
-  ResourceHandler *_resourceHandler;
-
-  std::map<ClientEventType, EventHandlerFunction> _eventHandlers;
-
+  time_t _clientTimeout;
   void handleRead(int clientFd);
   void handleWrite(int clientFd);
   void handleError(int clientFd);
   void handleTimeout(int clientFd);
-
   void sendErrorResponse(int clientFd, HTTP::StatusCode status);
-
+  bool processReadResult(int clientFd, Client& client, ssize_t bytes_read);
+  void processCompleteRequest(int clientFd, Client& client);
+  bool processWriteResult(int clientFd, Client& client, ssize_t bytes_written);
+  void handleWriteCompletion(int clientFd, Client& client);
 public:
-  ClientHandler(ConnectionManager &connectionManager,
-                const std::string &webRoot = "./www");
+  ClientHandler(Server &server,
+                const std::string &webRoot = "./www", time_t clientTimeout = 30);
   ~ClientHandler();
-
   void addClient(int clientFd, const struct sockaddr_in &clientAddr);
   void disconnectClient(int clientFd);
   bool hasClient(int clientFd) const;
-  const std::unordered_set<int> &getClients() const;
-
+  void checkTimeouts();
+  size_t getClientCount() const;
+  std::vector<int> getAllClientFds() const;
   void handleClientEvent(ClientEventType eventType, int clientFd);
-
-  void handleClientRead(int clientFd) {
-    handleClientEvent(ClientEventType::READ, clientFd);
-  }
-  void handleClientWrite(int clientFd) {
-    handleClientEvent(ClientEventType::WRITE, clientFd);
-  }
 };

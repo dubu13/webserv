@@ -1,58 +1,62 @@
 #include "HTTPResponse.hpp"
 #include <sstream>
-#include <string_view>
 
-HTTPResponse::HTTPResponse() noexcept
+HTTPResponse::HTTPResponse()
     : _status(HTTP::StatusCode::OK), _version(HTTP::Version::HTTP_1_1),
       _content_length(0) {}
 
-void HTTPResponse::setStatus(HTTP::StatusCode status) noexcept {
+void HTTPResponse::setStatus(HTTP::StatusCode status) {
   _status = status;
 }
 
-void HTTPResponse::setVersion(HTTP::Version version) noexcept {
+void HTTPResponse::setVersion(HTTP::Version version) {
   _version = version;
 }
 
-void HTTPResponse::setHeader(std::string_view key, std::string_view value) {
-  _headers[std::string(key)] = std::string(value);
+void HTTPResponse::setHeader(const std::string& key, const std::string& value) {
+  _headers[key] = value;
 }
 
-void HTTPResponse::setBody(std::string_view body) {
-  _body = std::string(body);
+void HTTPResponse::setBody(const std::string& body) {
+  _body = body;
   _content_length = _body.size();
   setHeader("Content-Length", std::to_string(_content_length));
 }
 
-void HTTPResponse::setContentType(std::string_view type) {
+void HTTPResponse::setContentType(const std::string& type) {
   setHeader("Content-Type", type);
 }
 
-void HTTPResponse::setContentLength(size_t length) noexcept {
+void HTTPResponse::setContentLength(size_t length) {
   _content_length = length;
   setHeader("Content-Length", std::to_string(_content_length));
 }
 
-HTTP::StatusCode HTTPResponse::getStatus() const noexcept { return _status; }
+HTTP::StatusCode HTTPResponse::getStatus() const { 
+  return _status; 
+}
 
-HTTP::Version HTTPResponse::getVersion() const noexcept { return _version; }
+HTTP::Version HTTPResponse::getVersion() const { 
+  return _version; 
+}
 
-std::optional<std::string_view>
-HTTPResponse::getHeader(std::string_view key) const noexcept {
-  auto it = _headers.find(std::string(key));
+std::string HTTPResponse::getHeader(const std::string& key) const {
+  auto it = _headers.find(key);
   if (it != _headers.end()) {
     return it->second;
   }
-  return std::nullopt;
+  return "";
 }
 
-std::map<std::string, std::string> HTTPResponse::getHeaders() const noexcept {
+std::map<std::string, std::string> HTTPResponse::getHeaders() const {
   return _headers;
 }
 
-std::string_view HTTPResponse::getBody() const noexcept { return _body; }
+std::string HTTPResponse::getBody() const { 
+  return _body; 
+}
 
-size_t HTTPResponse::getContentLength() const noexcept {
+size_t HTTPResponse::getContentLength() const {
   return _content_length;
 }
 
@@ -66,10 +70,5 @@ std::string HTTPResponse::generateResponse() const {
   }
   response << "\r\n";
   response << _body;
-
   return response.str();
-}
-
-std::unique_ptr<HTTPResponse> HTTPResponse::createResponse() noexcept {
-  return std::make_unique<HTTPResponse>();
 }
