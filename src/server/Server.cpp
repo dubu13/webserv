@@ -6,13 +6,16 @@
 
 extern bool g_running;
 
-Server::Server(const ServerConfig &config)
-    : _server_fd(-1), _config(config), _running(false) {
-  memset(&_address, 0, sizeof(_address));
-  if (getrlimit(RLIMIT_NOFILE, &_rlim) == -1) {
-    throw std::runtime_error("Failed to get file descriptor limit");
-  }
-  _clientHandler = new ClientHandler(*this, _config.root, 60);
+Server::Server(const ServerConfig& config) 
+    : _socket(config.port), _running(false), _config(config) {
+    if (getrlimit(RLIMIT_NOFILE, &_rlim) == -1) {
+        throw std::runtime_error("Failed to get file descriptor limit");
+    }
+    std::cout << "System allows " << _rlim.rlim_cur << " file descriptors." << std::endl;
+    std::cout << "Server will listen on " << config.host << ":" << config.port << std::endl;
+    
+    // Create the ClientHandler with configuration
+    _clientHandler = new ClientHandler(_connectionManager, config.root, 60);  // TODO: make timeout configurable
 }
 
 Server::~Server() {
