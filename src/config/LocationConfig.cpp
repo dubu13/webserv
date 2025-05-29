@@ -1,4 +1,5 @@
 #include "LocationConfig.hpp"
+#include <iostream>
 LocationConfig::LocationConfig()
     : root(), autoindex(false), allow_upload(false) {
 }
@@ -7,12 +8,11 @@ void LocationConfig::parseLocationBlock(std::ifstream &file) {
   while (std::getline(file, line)) {
       if (line.empty() || line[0] == '#')
           continue;
-      if (line == "}")
+      if (line.find('}') != std::string::npos)
           return;
       std::istringstream iss(line);
       std::string directive;
       iss >> directive;
-      
       if (directive == "root") {
           iss >> root;
       } else if (directive == "index") {
@@ -35,8 +35,8 @@ void LocationConfig::parseLocationBlock(std::ifstream &file) {
           std::string value;
           iss >> value;
           cgi_extension = value;
-      } else {
-          throw std::runtime_error("Unknown directive: " + directive);
+      } else if (!directive.empty()) {
+          std::cerr << "Warning: Unknown location directive: " << directive << std::endl;
       }
   }
 }

@@ -3,7 +3,6 @@
 #include <map>
 #include <memory>
 #include <string>
-
 class HTTPResponse {
 private:
   HTTP::StatusCode _status;
@@ -11,7 +10,6 @@ private:
   std::map<std::string, std::string> _headers;
   std::string _body;
   size_t _content_length;
-
 public:
   HTTPResponse();
   void setStatus(HTTP::StatusCode status);

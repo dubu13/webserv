@@ -17,7 +17,6 @@ class LocationConfig {
     std::optional<std::string> cgi_extension;
     bool autoindex{false};
     bool allow_upload{false};
-
     LocationConfig();
     void parseLocationBlock(std::ifstream &file);
 };

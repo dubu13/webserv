@@ -9,7 +9,6 @@ private:
   std::string _root_directory;
   std::map<std::string, std::string> _cgi_handlers;
   std::unique_ptr<HTTPResponse> executeScript(const std::string& script_path, const std::string& handler_path, const HTTPRequest& request);
-
 public:
   CGIHandler(const std::string &root = "./www");
   ~CGIHandler();

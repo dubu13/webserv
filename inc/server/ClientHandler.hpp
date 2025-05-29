@@ -1,39 +1,28 @@
 #pragma once
-#include "HTTPHandler.hpp"
 #include "Client.hpp"
+#include "HTTPHandler.hpp"
 #include <map>
-#include <memory>
-#include <netinet/in.h>
-#include <string>
-#include <ctime>
 #include <vector>
+#include <netinet/in.h>
+#include <ctime>
 class Server;
 class ClientHandler {
-public:
-  enum class ClientEventType { READ, WRITE, ERROR, TIMEOUT };
 private:
-  Server &_server;
-  std::map<int, Client> _clients;
-  HTTPHandler _httpHandler;
-  time_t _clientTimeout;
-  void handleRead(int clientFd);
-  void handleWrite(int clientFd);
-  void handleError(int clientFd);
-  void handleTimeout(int clientFd);
-  void sendErrorResponse(int clientFd, HTTP::StatusCode status);
-  bool processReadResult(int clientFd, Client& client, ssize_t bytes_read);
-  void processCompleteRequest(int clientFd, Client& client);
-  bool processWriteResult(int clientFd, Client& client, ssize_t bytes_written);
-  void handleWriteCompletion(int clientFd, Client& client);
+    Server& _server;
+    std::map<int, Client> _clients;
+    HTTPHandler _httpHandler;
+    time_t _timeout;
+    void processRequest(int fd, Client& client);
+    void sendResponse(int fd, Client& client);
+    void sendError(int fd, int status);
 public:
-  ClientHandler(Server &server,
-                const std::string &webRoot = "./www", time_t clientTimeout = 30);
-  ~ClientHandler();
-  void addClient(int clientFd, const struct sockaddr_in &clientAddr);
-  void disconnectClient(int clientFd);
-  bool hasClient(int clientFd) const;
-  void checkTimeouts();
-  size_t getClientCount() const;
-  std::vector<int> getAllClientFds() const;
-  void handleClientEvent(ClientEventType eventType, int clientFd);
+    ClientHandler(Server& server, const std::string& webRoot, time_t timeout = 60);
+    ~ClientHandler();
+    void addClient(int fd, const struct sockaddr_in& addr);
+    void removeClient(int fd);
+    bool hasClient(int fd) const;
+    size_t getClientCount() const;
+    void handleRead(int fd);
+    void handleWrite(int fd);
+    void checkTimeouts();
 };

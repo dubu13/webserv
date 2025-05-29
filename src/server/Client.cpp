@@ -100,7 +100,6 @@ ssize_t Client::writeData() {
     }
     return bytes_written;
 }
-
 bool Client::hasDataToWrite() const {
     return !_outgoingData.empty();
 }

@@ -3,15 +3,12 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
-
-// Simple MIME type mapping
 static std::string getMimeType(const std::string& path) {
     std::string ext;
     size_t dot_pos = path.find_last_of('.');
     if (dot_pos != std::string::npos) {
         ext = path.substr(dot_pos + 1);
     }
-    
     if (ext == "html" || ext == "htm") return "text/html";
     if (ext == "css") return "text/css";
     if (ext == "js") return "application/javascript";
@@ -23,15 +20,20 @@ static std::string getMimeType(const std::string& path) {
     if (ext == "pdf") return "application/pdf";
     return "application/octet-stream";
 }
-
-HTTPHandler::HTTPHandler(const std::string& root)
+HTTPHandler::HTTPHandler(const std::string& root, const ServerConfig* config)
     : _root_directory(root),
-      _cgiHandler(root) {
-    // Initialize custom error pages
-    _custom_error_pages[HTTP::StatusCode::NOT_FOUND] = "/errors/404.html";
-    _custom_error_pages[HTTP::StatusCode::BAD_REQUEST] = "/errors/400.html";
-    _custom_error_pages[HTTP::StatusCode::INTERNAL_SERVER_ERROR] = "/errors/500.html";
-    _custom_error_pages[HTTP::StatusCode::METHOD_NOT_ALLOWED] = "/errors/405.html";
+      _cgiHandler(root),
+      _config(config) {
+    if (_config && !_config->error_pages.empty()) {
+        for (const auto& errorPage : _config->error_pages) {
+            _custom_error_pages[static_cast<HTTP::StatusCode>(errorPage.first)] = errorPage.second;
+        }
+    } else {
+        _custom_error_pages[HTTP::StatusCode::NOT_FOUND] = "/errors/404.html";
+        _custom_error_pages[HTTP::StatusCode::BAD_REQUEST] = "/errors/400.html";
+        _custom_error_pages[HTTP::StatusCode::INTERNAL_SERVER_ERROR] = "/errors/500.html";
+        _custom_error_pages[HTTP::StatusCode::METHOD_NOT_ALLOWED] = "/errors/405.html";
+    }
 }
 HTTPHandler::~HTTPHandler() {}
 std::unique_ptr<HTTPResponse> HTTPHandler::handleRequest(const std::string& requestData) {
@@ -82,13 +84,11 @@ std::unique_ptr<HTTPResponse> HTTPHandler::handleDELETE(const HTTPRequest& reque
 std::unique_ptr<HTTPResponse> HTTPHandler::handleError(HTTP::StatusCode status) {
     return generateErrorResponse(status);
 }
-
 std::unique_ptr<HTTPResponse> HTTPHandler::generateErrorResponse(HTTP::StatusCode status) {
     auto response = std::make_unique<HTTPResponse>();
     response->setStatus(status);
     response->setContentType("text/html");
     response->setHeader("Connection", "close");
-    
     std::string errorContent;
     auto errorPageIt = _custom_error_pages.find(status);
     if (errorPageIt != _custom_error_pages.end()) {
@@ -104,11 +104,9 @@ std::unique_ptr<HTTPResponse> HTTPHandler::generateErrorResponse(HTTP::StatusCod
     } else {
         errorContent = getGenericErrorMessage(status);
     }
-    
     response->setBody(errorContent);
     return response;
 }
-
 std::string HTTPHandler::getGenericErrorMessage(HTTP::StatusCode status) const {
     std::string statusStr = std::to_string(static_cast<int>(status));
     std::string statusText = HTTP::statusToString(status);

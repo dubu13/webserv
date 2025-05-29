@@ -12,12 +12,12 @@ std::unique_ptr<HTTPResponse> CGIHandler::executeCGI(const std::string& uri, con
     std::string filePath = _root_directory + uri;
     size_t dot_pos = filePath.find_last_of('.');
     if (dot_pos == std::string::npos) {
-        return nullptr; // Let HTTPHandler handle the error
+        return nullptr;
     }
     std::string extension = filePath.substr(dot_pos);
     auto handlerIt = _cgi_handlers.find(extension);
     if (handlerIt == _cgi_handlers.end()) {
-        return nullptr; // Let HTTPHandler handle the error
+        return nullptr;
     }
     return executeScript(filePath, handlerIt->second, request);
 }
@@ -35,7 +35,6 @@ bool CGIHandler::canHandle(const std::string& filePath) const {
 void CGIHandler::setRootDirectory(const std::string& root) {
     _root_directory = root;
 }
-
 std::unique_ptr<HTTPResponse> CGIHandler::executeScript(const std::string& script_path, const std::string& handler_path, const HTTPRequest& request) {
     (void)script_path;
     (void)handler_path;

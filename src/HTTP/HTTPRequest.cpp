@@ -1,9 +1,7 @@
 #include "HTTP/HTTPRequest.hpp"
 #include <iostream>
-
 HTTPRequest::HTTPRequest() = default;
 HTTPRequest::~HTTPRequest() = default;
-
 bool HTTPRequest::parseRequest(const std::string &data) {
   try {
     size_t pos = data.find("\r\n");
@@ -12,7 +10,6 @@ bool HTTPRequest::parseRequest(const std::string &data) {
       return false;
     }
     _requestLine = parseRequestLine(data.substr(0, pos));
-    
     size_t headerStart = pos + 2;
     size_t headerEnd = data.find("\r\n\r\n", headerStart);
     if (headerEnd == std::string::npos) {
@@ -20,7 +17,6 @@ bool HTTPRequest::parseRequest(const std::string &data) {
       return false;
     }
     _headers = parseHeaders(data.substr(headerStart, headerEnd - headerStart));
-    
     size_t bodyStart = headerEnd + 4;
     if (bodyStart < data.length()) {
       _body = data.substr(bodyStart);
@@ -31,34 +27,27 @@ bool HTTPRequest::parseRequest(const std::string &data) {
     return false;
   }
 }
-
 HTTP::Method HTTPRequest::getMethod() const {
   return _requestLine.method;
 }
-
 std::string HTTPRequest::getUri() const {
   return _requestLine.uri;
 }
-
 std::string HTTPRequest::getVersion() const {
   return _requestLine.version;
 }
-
 std::string HTTPRequest::getBody() const {
   return _body;
 }
-
 std::string HTTPRequest::getHeader(const std::string &key) const {
   auto it = _headers.find(key);
   if (it != _headers.end())
     return it->second;
   return "";
 }
-
 std::map<std::string, std::string> HTTPRequest::getHeaders() const {
   return _headers;
 }
-
 HTTP::RequestLine HTTPRequest::parseRequestLine(const std::string &line) {
   HTTP::RequestLine requestLine;
   std::string::size_type start = 0;
@@ -77,7 +66,6 @@ HTTP::RequestLine HTTPRequest::parseRequestLine(const std::string &line) {
   requestLine.version = line.substr(start);
   return requestLine;
 }
-
 std::map<std::string, std::string> HTTPRequest::parseHeaders(const std::string &headerSection) {
   std::map<std::string, std::string> headers;
   std::string::size_type start = 0;
