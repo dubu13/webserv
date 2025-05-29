@@ -2,6 +2,7 @@
 
 #include "Socket.hpp"
 #include "ConnectionManager.hpp"
+#include "config/ServerConfig.hpp"  // Add ServerConfig header
 #include <sys/resource.h> // for struct rlimit
 #include <unordered_set>
 #include <fcntl.h> // for fcntl
@@ -19,9 +20,10 @@ private:
     ClientHandler* _clientHandler;
     rlimit _rlim;
     bool _running;
+    ServerConfig _config;  // Store server configuration
 
 public:
-    Server(int port = 8080);
+    Server(const ServerConfig& config);  // Updated constructor
     ~Server();
 
     void start();
