@@ -1,43 +1,44 @@
 #include "Poller.hpp"
 #include <algorithm>
 void Poller::addFd(int fd, short events) {
-    struct pollfd pfd;
-    pfd.fd = fd;
-    pfd.events = events;
-    pfd.revents = 0;
-    _poll_fds.push_back(pfd);
+  struct pollfd pfd;
+  pfd.fd = fd;
+  pfd.events = events;
+  pfd.revents = 0;
+  _poll_fds.push_back(pfd);
 }
 void Poller::removeFd(int fd) {
-    auto it = std::find_if(_poll_fds.begin(), _poll_fds.end(),
-                          [fd](const struct pollfd& pfd) { return pfd.fd == fd; });
-    if (it != _poll_fds.end()) {
-        _poll_fds.erase(it);
-    }
+  auto it =
+      std::find_if(_poll_fds.begin(), _poll_fds.end(),
+                   [fd](const struct pollfd &pfd) { return pfd.fd == fd; });
+  if (it != _poll_fds.end()) {
+    _poll_fds.erase(it);
+  }
 }
 void Poller::updateFd(int fd, short events) {
-    removeFd(fd);
-    addFd(fd, events);
+  removeFd(fd);
+  addFd(fd, events);
 }
 std::vector<struct pollfd> Poller::poll() {
-    std::vector<struct pollfd> active_fds;
-    if (_poll_fds.empty()) return active_fds;
-    int ret = ::poll(_poll_fds.data(), _poll_fds.size(), _timeout);
-    if (ret < 0) {
-        if (errno == EINTR) return active_fds;
-        throw std::runtime_error("poll() failed: " + std::string(strerror(errno)));
-    }
-    if (ret > 0) {
-        for (const struct pollfd& pfd : _poll_fds) {
-            if (pfd.revents > 0) {
-                active_fds.push_back(pfd);
-            }
-        }
-    }
+  std::vector<struct pollfd> active_fds;
+  if (_poll_fds.empty())
     return active_fds;
+  int ret = ::poll(_poll_fds.data(), _poll_fds.size(), _timeout);
+  if (ret < 0) {
+    if (errno == EINTR)
+      return active_fds;
+    throw std::runtime_error("poll() failed: " + std::string(strerror(errno)));
+  }
+  if (ret > 0) {
+    for (const struct pollfd &pfd : _poll_fds) {
+      if (pfd.revents > 0) {
+        active_fds.push_back(pfd);
+      }
+    }
+  }
+  return active_fds;
 }
-bool Poller::hasActivity(const struct pollfd& pfd, short events) const {
-    return (pfd.revents & events) == events;
+bool Poller::hasActivity(const struct pollfd &pfd, short events) const {
+  return (pfd.revents & events) == events;
 }
-bool Poller::empty() const {
-    return _poll_fds.empty();
-}
+bool Poller::empty() const { return _poll_fds.empty(); }

@@ -1,11 +1,11 @@
 #pragma once
 #include "LocationConfig.hpp"
+#include <fstream>
 #include <map>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <vector>
-#include <fstream>
-#include <sstream>
 class ServerConfig {
 public:
   std::string host;
@@ -18,5 +18,5 @@ public:
   ServerConfig();
   bool matchesHost(const std::string &host) const;
   const LocationConfig *getLocation(const std::string &path) const;
-  void parseServerBlock(std::ifstream& file);
+  void parseServerBlock(std::ifstream &file);
 };

@@ -1,147 +1,89 @@
 #include "HTTP/HTTPHandler.hpp"
 #include <iostream>
-#include <fstream>
-#include <sstream>
-#include <vector>
-static std::string getMimeType(const std::string& path) {
-    std::string ext;
-    size_t dot_pos = path.find_last_of('.');
-    if (dot_pos != std::string::npos) {
-        ext = path.substr(dot_pos + 1);
+HTTPHandler::HTTPHandler(const std::string &root, const ServerConfig *config)
+    : _root_directory(root), _cgiHandler(root), _config(config) {
+  if (_config && !_config->error_pages.empty()) {
+    for (const auto &errorPage : _config->error_pages) {
+      _custom_error_pages[static_cast<HTTP::StatusCode>(errorPage.first)] =
+          errorPage.second;
     }
-    if (ext == "html" || ext == "htm") return "text/html";
-    if (ext == "css") return "text/css";
-    if (ext == "js") return "application/javascript";
-    if (ext == "json") return "application/json";
-    if (ext == "png") return "image/png";
-    if (ext == "jpg" || ext == "jpeg") return "image/jpeg";
-    if (ext == "gif") return "image/gif";
-    if (ext == "txt") return "text/plain";
-    if (ext == "pdf") return "application/pdf";
-    return "application/octet-stream";
-}
-HTTPHandler::HTTPHandler(const std::string& root, const ServerConfig* config)
-    : _root_directory(root),
-      _cgiHandler(root),
-      _config(config) {
-    if (_config && !_config->error_pages.empty()) {
-        for (const auto& errorPage : _config->error_pages) {
-            _custom_error_pages[static_cast<HTTP::StatusCode>(errorPage.first)] = errorPage.second;
-        }
-    } else {
-        _custom_error_pages[HTTP::StatusCode::NOT_FOUND] = "/errors/404.html";
-        _custom_error_pages[HTTP::StatusCode::BAD_REQUEST] = "/errors/400.html";
-        _custom_error_pages[HTTP::StatusCode::INTERNAL_SERVER_ERROR] = "/errors/500.html";
-        _custom_error_pages[HTTP::StatusCode::METHOD_NOT_ALLOWED] = "/errors/405.html";
-    }
+  } else {
+    _custom_error_pages[HTTP::StatusCode::NOT_FOUND] = "/errors/404.html";
+    _custom_error_pages[HTTP::StatusCode::BAD_REQUEST] = "/errors/400.html";
+    _custom_error_pages[HTTP::StatusCode::INTERNAL_SERVER_ERROR] =
+        "/errors/500.html";
+    _custom_error_pages[HTTP::StatusCode::METHOD_NOT_ALLOWED] =
+        "/errors/405.html";
+  }
 }
 HTTPHandler::~HTTPHandler() {}
-std::unique_ptr<HTTPResponse> HTTPHandler::handleRequest(const std::string& requestData) {
-    try {
-        HTTPRequest request;
-        if (request.parseRequest(requestData)) {
-            switch (request.getMethod()) {
-                case HTTP::Method::GET:
-                    return handleGET(request);
-                case HTTP::Method::POST:
-                    return handlePOST(request);
-                case HTTP::Method::DELETE:
-                    return handleDELETE(request);
-                default:
-                    return handleError(HTTP::StatusCode::METHOD_NOT_ALLOWED);
-            }
-        } else {
-            return handleError(HTTP::StatusCode::BAD_REQUEST);
-        }
+std::string HTTPHandler::handleRequest(const std::string &requestData) {
+  try {
+    HTTP::Request request;
+    if (!HTTP::parseRequest(requestData, request)) {
+      return HTTP::createErrorResponse(HTTP::StatusCode::BAD_REQUEST);
     }
-    catch (const std::exception& e) {
-        std::cerr << "Server error: " << e.what() << std::endl;
-        return handleError(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
-    }
-}
-std::unique_ptr<HTTPResponse> HTTPHandler::handleGET(const HTTPRequest& request) {
-    std::string uri = request.getUri();
+    std::string uri = request.requestLine.uri;
     std::string filePath = _root_directory + uri;
-    if (_cgiHandler.canHandle(filePath)) {
-        auto cgiResponse = _cgiHandler.executeCGI(uri, request);
-        if (cgiResponse) {
-            return cgiResponse;
-        } else {
-            return handleError(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
+    switch (request.requestLine.method) {
+    case HTTP::Method::GET:
+      if (_cgiHandler.canHandle(filePath)) {
+        std::string cgiResponse = _cgiHandler.executeCGI(uri, request);
+        return !cgiResponse.empty()
+                   ? cgiResponse
+                   : HTTP::createErrorResponse(
+                         HTTP::StatusCode::INTERNAL_SERVER_ERROR);
+      } else {
+        HTTP::StatusCode status;
+        std::string content = FileOps::readFile(_root_directory, uri, status);
+        if (status != HTTP::StatusCode::OK) {
+          auto errorPageIt = _custom_error_pages.find(status);
+          if (errorPageIt != _custom_error_pages.end()) {
+            HTTP::StatusCode fileStatus;
+            std::string customContent = FileOps::readFile(
+                _root_directory, errorPageIt->second, fileStatus);
+            if (fileStatus == HTTP::StatusCode::OK) {
+              return HTTP::createFileResponse(status, customContent,
+                                              "text/html");
+            }
+          }
+          return HTTP::createErrorResponse(status);
         }
-    } else {
-        return serveResource(uri);
+        return HTTP::createFileResponse(status, content,
+                                        FileOps::getMimeType(filePath));
+      }
+    case HTTP::Method::POST:
+      if (_cgiHandler.canHandle(filePath)) {
+        std::string cgiResponse = _cgiHandler.executeCGI(uri, request);
+        return !cgiResponse.empty()
+                   ? cgiResponse
+                   : HTTP::createErrorResponse(
+                         HTTP::StatusCode::INTERNAL_SERVER_ERROR);
+      } else {
+        HTTP::StatusCode status;
+        bool success =
+            FileOps::writeFile(_root_directory, uri, request.body, status);
+        return HTTP::createSimpleResponse(
+            status, success ? "File uploaded successfully" : "Upload failed");
+      }
+    case HTTP::Method::DELETE: {
+      HTTP::StatusCode status;
+      bool success = FileOps::deleteFile(_root_directory, uri, status);
+      return HTTP::createSimpleResponse(status, success ? "File deleted"
+                                                        : "Delete failed");
     }
-}
-std::unique_ptr<HTTPResponse> HTTPHandler::handlePOST(const HTTPRequest& request) {
-    (void)request;
-    return handleError(HTTP::StatusCode::NOT_IMPLEMENTED);
-}
-std::unique_ptr<HTTPResponse> HTTPHandler::handleDELETE(const HTTPRequest& request) {
-    (void)request;
-    return handleError(HTTP::StatusCode::NOT_IMPLEMENTED);
-}
-std::unique_ptr<HTTPResponse> HTTPHandler::handleError(HTTP::StatusCode status) {
-    return generateErrorResponse(status);
-}
-std::unique_ptr<HTTPResponse> HTTPHandler::generateErrorResponse(HTTP::StatusCode status) {
-    auto response = std::make_unique<HTTPResponse>();
-    response->setStatus(status);
-    response->setContentType("text/html");
-    response->setHeader("Connection", "close");
-    std::string errorContent;
-    auto errorPageIt = _custom_error_pages.find(status);
-    if (errorPageIt != _custom_error_pages.end()) {
-        std::string errorFilePath = _root_directory + errorPageIt->second;
-        std::ifstream errorFile(errorFilePath);
-        if (errorFile.is_open()) {
-            std::stringstream buffer;
-            buffer << errorFile.rdbuf();
-            errorContent = buffer.str();
-        } else {
-            errorContent = getGenericErrorMessage(status);
-        }
-    } else {
-        errorContent = getGenericErrorMessage(status);
+    case HTTP::Method::HEAD:
+    case HTTP::Method::PUT:
+    case HTTP::Method::PATCH:
+    default:
+      return HTTP::createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
     }
-    response->setBody(errorContent);
-    return response;
+  } catch (const std::exception &e) {
+    std::cerr << "Server error: " << e.what() << std::endl;
+    return HTTP::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
+  }
 }
-std::string HTTPHandler::getGenericErrorMessage(HTTP::StatusCode status) const {
-    std::string statusStr = std::to_string(static_cast<int>(status));
-    std::string statusText = HTTP::statusToString(status);
-    return "<html><body><h1>" + statusStr + " " + statusText + "</h1></body></html>";
-}
-void HTTPHandler::setRootDirectory(const std::string& root) {
-    _root_directory = root;
-    _cgiHandler.setRootDirectory(root);
-}
-std::unique_ptr<HTTPResponse> HTTPHandler::serveResource(const std::string& uri) {
-    auto response = std::make_unique<HTTPResponse>();
-    std::string normalizedUri = uri;
-    if (normalizedUri == "/") {
-        normalizedUri = "/index.html";
-    }
-    std::string filePath = _root_directory + normalizedUri;
-    std::ifstream file(filePath, std::ios::binary | std::ios::ate);
-    if (file.is_open()) {
-        std::streamsize size = file.tellg();
-        file.seekg(0, std::ios::beg);
-        std::vector<char> buffer(size);
-        if (file.read(buffer.data(), size)) {
-            response->setStatus(HTTP::StatusCode::OK);
-            response->setContentType(getMimeType(filePath));
-            response->setBody(std::string(buffer.data(), size));
-        } else {
-            response->setStatus(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
-            response->setContentType("text/html");
-            response->setBody("<html><body><h1>500 Internal Server Error</h1></body></html>");
-        }
-    } else {
-        response->setStatus(HTTP::StatusCode::NOT_FOUND);
-        response->setContentType("text/html");
-        response->setBody("<html><body><h1>404 Not Found</h1></body></html>");
-    }
-    response->setHeader("Connection", "close");
-    return response;
+void HTTPHandler::setRootDirectory(const std::string &root) {
+  _root_directory = root;
+  _cgiHandler.setRootDirectory(root);
 }

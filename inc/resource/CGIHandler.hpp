@@ -1,19 +1,19 @@
 #pragma once
-#include "HTTPResponse.hpp"
-#include "HTTPRequest.hpp"
+#include "HTTP/HTTP.hpp"
 #include <map>
-#include <memory>
 #include <string>
 class CGIHandler {
 private:
   std::string _root_directory;
   std::map<std::string, std::string> _cgi_handlers;
-  std::unique_ptr<HTTPResponse> executeScript(const std::string& script_path, const std::string& handler_path, const HTTPRequest& request);
+  std::string executeScript(const std::string &script_path,
+                            const std::string &handler_path,
+                            const HTTP::Request &request);
+
 public:
   CGIHandler(const std::string &root = "./www");
   ~CGIHandler();
-  std::unique_ptr<HTTPResponse> executeCGI(const std::string &uri,
-                                           const HTTPRequest &request);
+  std::string executeCGI(const std::string &uri, const HTTP::Request &request);
   void registerHandler(const std::string &extension,
                        const std::string &handlerPath);
   bool canHandle(const std::string &filePath) const;
