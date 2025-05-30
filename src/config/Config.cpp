@@ -1,14 +1,16 @@
 #include "config/Config.hpp"
-#include "config/ConfigUtils.hpp"
+#include "config/ConfigHandlers.ipp"
+#include "utils/Logger.hpp"
 #include <fstream>
 #include <sstream>
-#include "config/ConfigHandlers.ipp"
 
 Config::Config(const std::string& fileName) : _fileName(fileName) {
+    Logger::infof("Config constructor with file: %s", fileName.c_str());
     initializeHandlers();
 }
 
 void Config::parseFromFile() {
+    Logger::infof("Starting to parse config file: %s", _fileName.c_str());
     std::ifstream file(_fileName);
     if (!file.is_open()) {
         throw std::runtime_error("Could not open config file: " + _fileName);
@@ -36,6 +38,7 @@ void Config::parseFromFile() {
 }
 
 void Config::parseServerBlock(const std::string& content, ServerBlock& server) {
+    Logger::debug("Parsing server block...");
     std::istringstream iss(content);
     std::string line;
     
@@ -43,10 +46,20 @@ void Config::parseServerBlock(const std::string& content, ServerBlock& server) {
         auto [directive, value] = ConfigUtils::parseDirective(line);
         if (directive.empty()) continue;
         
+        Logger::debugf("Processing directive: '%s' with value: '%s'", directive.c_str(), value.c_str());
+        
         // Handle location blocks specially
-        if (directive.find("location ") == 0) {
-            // Extract location path
-            std::string locationPath = directive.substr(9);
+        if (directive == "location") {
+            // Extract location path from value (format: "/ {" or "/path {")
+            std::string locationPath = value;
+            
+            // Remove the opening brace if present
+            size_t bracePos = locationPath.find('{');
+            if (bracePos != std::string::npos) {
+                locationPath = locationPath.substr(0, bracePos);
+            }
+            locationPath = ConfigUtils::trim(locationPath);
+            
             if (locationPath.empty() || !ConfigUtils::isValidPath(locationPath)) {
                 throw std::invalid_argument("Invalid location path: " + locationPath);
             }
@@ -66,18 +79,26 @@ void Config::parseServerBlock(const std::string& content, ServerBlock& server) {
             
             LocationBlock location;
             location.path = locationPath;
+            Logger::debugf("Parsing location block for path: %s", locationPath.c_str());
             parseLocationBlock(locationContent, location);
             server.locations[locationPath] = location;
+            Logger::debugf("Added location %s with root: %s", locationPath.c_str(), location.root.c_str());
             continue;
         }
         
         // Use hash map for directive handling
         auto it = _serverHandlers.find(directive);
         if (it != _serverHandlers.end()) {
+            Logger::debugf("Handling server directive: %s = %s", directive.c_str(), value.c_str());
             (this->*(it->second))(value, server);
+        } else {
+            Logger::warnf("Unknown server directive: %s", directive.c_str());
         }
         // Unknown directives are silently ignored for flexibility
     }
+    
+    Logger::debugf("Server block parsed. Root: %s, Locations: %zu", 
+                   server.root.c_str(), server.locations.size());
     
     // Validate required fields
     if (server.listenDirectives.empty()) {
@@ -86,12 +107,15 @@ void Config::parseServerBlock(const std::string& content, ServerBlock& server) {
 }
 
 void Config::parseLocationBlock(const std::string& content, LocationBlock& location) {
+    Logger::debugf("Parsing location block content: %s", content.c_str());
     std::istringstream iss(content);
     std::string line;
     
     while (std::getline(iss, line)) {
         auto [directive, value] = ConfigUtils::parseDirective(line);
         if (directive.empty() || directive.find("location ") == 0) continue;
+        
+        Logger::debugf("Location directive: '%s' = '%s'", directive.c_str(), value.c_str());
         
         // Use hash map for directive handling
         auto it = _locationHandlers.find(directive);

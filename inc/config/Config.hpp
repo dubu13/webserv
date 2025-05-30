@@ -6,11 +6,9 @@
 #include <unordered_map>
 #include <stdexcept>
 
-// Forward declarations
 struct LocationBlock;
 struct ServerBlock;
 
-// Include struct definitions
 #include "config/LocationBlock.ipp"
 #include "config/ServerBlock.ipp"
 
