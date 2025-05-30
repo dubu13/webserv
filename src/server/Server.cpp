@@ -6,7 +6,7 @@
 
 extern bool g_running;
 
-Server::Server(const ServerConfig& config) 
+Server::Server(const ServerBlock& config) 
     : _server_fd(-1), _config(config), _running(false) {
     if (getrlimit(RLIMIT_NOFILE, &_rlim) == -1) {
         throw std::runtime_error("Failed to get file descriptor limit");

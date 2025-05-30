@@ -2,10 +2,11 @@
 #include "utils/FileUtils.hpp"
 #include <iostream>
 #include <ctime>
-HTTPHandler::HTTPHandler(const std::string &root, const ServerConfig *config)
+
+HTTPHandler::HTTPHandler(const std::string &root, const ServerBlock *config)
     : _root_directory(root), _cgiHandler(root), _config(config) {
-  if (_config && !_config->error_pages.empty()) {
-    for (const auto &errorPage : _config->error_pages) {
+  if (_config && !_config->errorPages.empty()) {
+    for (const auto &errorPage : _config->errorPages) {
       _custom_error_pages[static_cast<HTTP::StatusCode>(errorPage.first)] =
           errorPage.second;
     }
@@ -30,13 +31,13 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
     std::string uri = request.requestLine.uri;
     
     // Get location configuration for this URI
-    const LocationConfig *location = nullptr;
+    const LocationBlock *location = nullptr;
     if (_config) {
       location = _config->getLocation(uri);
     }
     
     // Check if method is allowed for this location
-    if (location && !location->allowed_methods.empty()) {
+    if (location && !location->allowedMethods.empty()) {
       std::string methodStr;
       switch (request.requestLine.method) {
         case HTTP::Method::GET: methodStr = "GET"; break;
@@ -45,7 +46,7 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
         default: methodStr = "UNKNOWN"; break;
       }
       
-      if (location->allowed_methods.find(methodStr) == location->allowed_methods.end()) {
+      if (location->allowedMethods.find(methodStr) == location->allowedMethods.end()) {
         return HTTP::createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
       }
     }
@@ -91,9 +92,9 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
         HTTP::StatusCode status;
         bool success = false;
         
-        if (location && location->upload_path.has_value()) {
+        if (location && !location->uploadStore.empty()) {
           // Use configured upload directory
-          std::string uploadDir = location->upload_path.value();
+          std::string uploadDir = location->uploadStore;
           std::string filename = "upload_" + std::to_string(time(nullptr)) + ".txt";
           std::string uploadPath = "/" + filename;
           success = FileUtils::writeFile(uploadDir, uploadPath, request.body, status);

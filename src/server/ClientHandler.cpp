@@ -106,7 +106,7 @@ void ClientHandler::handleRead(int fd) {
   if (it == _clients.end()) return;
   
   ClientData &client = it->second;
-  size_t maxBodySize = _server.getConfig().client_max_body_size;
+  size_t maxBodySize = _server.getConfig().clientMaxBodySize;
   
   ssize_t bytes = readClientData(fd, client.incomingData, maxBodySize);
   
