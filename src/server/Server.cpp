@@ -7,15 +7,21 @@
 extern bool g_running;
 
 Server::Server(const ServerConfig& config) 
-    : _socket(config.port), _running(false), _config(config) {
+    : _server_fd(-1), _config(config), _running(false) {
     if (getrlimit(RLIMIT_NOFILE, &_rlim) == -1) {
         throw std::runtime_error("Failed to get file descriptor limit");
     }
     std::cout << "System allows " << _rlim.rlim_cur << " file descriptors." << std::endl;
-    std::cout << "Server will listen on " << config.host << ":" << config.port << std::endl;
+    
+    // Extract port from listen directives for display
+    int port = 8080; // default
+    if (!config.listenDirectives.empty()) {
+        port = config.listenDirectives[0].second;
+    }
+    std::cout << "Server will listen on " << config.host << ":" << port << std::endl;
     
     // Create the ClientHandler with configuration
-    _clientHandler = new ClientHandler(_connectionManager, config.root, 60);  // TODO: make timeout configurable
+    _clientHandler = new ClientHandler(*this, config.root, 60);  // TODO: make timeout configurable
 }
 
 Server::~Server() {
@@ -36,7 +42,12 @@ void Server::setupSocket() {
     throw std::runtime_error("Failed to set socket options");
   }
   _address.sin_family = AF_INET;
-  _address.sin_port = htons(_config.port);
+  // Extract port from listen directives
+  int port = 8080; // default
+  if (!_config.listenDirectives.empty()) {
+    port = _config.listenDirectives[0].second;
+  }
+  _address.sin_port = htons(port);
   if (inet_pton(AF_INET, _config.host.c_str(), &_address.sin_addr) <= 0) {
     close(_server_fd);
     throw std::runtime_error("Failed to convert host address");
@@ -50,8 +61,7 @@ void Server::setupSocket() {
     throw std::runtime_error("Failed to listen on socket");
   }
   setNonBlocking(_server_fd);
-  std::cout << "Server listening on " << _config.host << ":" << _config.port
-            << std::endl;
+  std::cout << "Socket setup complete" << std::endl;
 }
 
 void Server::setNonBlocking(int fd) {
@@ -65,8 +75,14 @@ void Server::run() {
   _running = true;
   setupSocket();
   _poller.addFd(_server_fd, POLLIN);
-  std::cout << "Server listening on " << _config.host << ":" << _config.port
-            << std::endl;
+  
+  // Extract port for display
+  int port = 8080; // default
+  if (!_config.listenDirectives.empty()) {
+    port = _config.listenDirectives[0].second;
+  }
+  std::cout << "Server listening on " << _config.host << ":" << port << std::endl;
+  
   while (g_running && _running) {
     try {
       auto active_fds = _poller.poll();

@@ -51,5 +51,4 @@ class ServerConfig {
       bool validateServerName(const std::string& name) const;
       bool isValidWildcard(const std::string& name) const;
       bool isLabelValid(const std::string& label) const;
-
 };
