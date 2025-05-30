@@ -1,74 +1,128 @@
 #include "HTTP/HTTPHandler.hpp"
+#include "utils/FileUtils.hpp"
 #include <iostream>
-#include <fstream>
-
-HTTPHandler::HTTPHandler(const std::string& root) 
-    : _root_directory(root), 
-      _errorHandler(root),
-      _resourceHandler(root, &_errorHandler),
-      _cgiHandler(root, &_errorHandler) {
-    _handlers[HTTP::Method::GET] = &HTTPHandler::handleGET;
-    _handlers[HTTP::Method::POST] = &HTTPHandler::handlePOST;
-    _handlers[HTTP::Method::DELETE] = &HTTPHandler::handleDELETE;
+#include <ctime>
+HTTPHandler::HTTPHandler(const std::string &root, const ServerConfig *config)
+    : _root_directory(root), _cgiHandler(root), _config(config) {
+  if (_config && !_config->error_pages.empty()) {
+    for (const auto &errorPage : _config->error_pages) {
+      _custom_error_pages[static_cast<HTTP::StatusCode>(errorPage.first)] =
+          errorPage.second;
+    }
+  } else {
+    _custom_error_pages[HTTP::StatusCode::NOT_FOUND] = "/errors/404.html";
+    _custom_error_pages[HTTP::StatusCode::BAD_REQUEST] = "/errors/400.html";
+    _custom_error_pages[HTTP::StatusCode::INTERNAL_SERVER_ERROR] =
+        "/errors/500.html";
+    _custom_error_pages[HTTP::StatusCode::METHOD_NOT_ALLOWED] =
+        "/errors/405.html";
+    _custom_error_pages[HTTP::StatusCode::PAYLOAD_TOO_LARGE] =
+        "/errors/413.html";
+  }
 }
-
 HTTPHandler::~HTTPHandler() {}
-
-std::unique_ptr<HTTPResponse> HTTPHandler::handleRequest(const std::string& requestData) {
-    try {
-        auto request = IHTTPRequest::createRequest(requestData);
-        
-        if (request) {
-            std::cout << "Processing " << HTTP::methodToString(request->getMethod()) 
-                     << " request for URI: " << request->getUri() << std::endl;
-            
-            auto handlerIt = _handlers.find(request->getMethod());
-            if (handlerIt != _handlers.end()) {
-                return (this->*(handlerIt->second))(*request);
-            } else {
-                return handleError(HTTP::StatusCode::METHOD_NOT_ALLOWED);
-            }
-        } else {
-            return handleError(HTTP::StatusCode::BAD_REQUEST);
-        }
+std::string HTTPHandler::handleRequest(const std::string &requestData) {
+  try {
+    HTTP::Request request;
+    if (!HTTP::parseRequest(requestData, request)) {
+      return HTTP::createErrorResponse(HTTP::StatusCode::BAD_REQUEST);
     }
-    catch (const std::exception& e) {
-        std::cerr << "Server error: " << e.what() << std::endl;
-        return handleError(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
-    }
-}
-
-std::unique_ptr<HTTPResponse> HTTPHandler::handleGET(const IHTTPRequest& request) {
-    std::string uri = request.getUri();
-    std::string filePath = _root_directory + uri;
+    std::string uri = request.requestLine.uri;
     
-    if (_cgiHandler.canHandle(filePath)) {
-        return _cgiHandler.executeCGI(uri, request);
-    } else {
-        return _resourceHandler.serveResource(uri);
+    // Get location configuration for this URI
+    const LocationConfig *location = nullptr;
+    if (_config) {
+      location = _config->getLocation(uri);
     }
+    
+    // Check if method is allowed for this location
+    if (location && !location->allowed_methods.empty()) {
+      std::string methodStr;
+      switch (request.requestLine.method) {
+        case HTTP::Method::GET: methodStr = "GET"; break;
+        case HTTP::Method::POST: methodStr = "POST"; break;
+        case HTTP::Method::DELETE: methodStr = "DELETE"; break;
+        default: methodStr = "UNKNOWN"; break;
+      }
+      
+      if (location->allowed_methods.find(methodStr) == location->allowed_methods.end()) {
+        return HTTP::createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
+      }
+    }
+    
+    std::string filePath = _root_directory + uri;
+    switch (request.requestLine.method) {
+    case HTTP::Method::GET:
+      if (_cgiHandler.canHandle(filePath)) {
+        std::string cgiResponse = _cgiHandler.executeCGI(uri, request);
+        return !cgiResponse.empty()
+                   ? cgiResponse
+                   : HTTP::createErrorResponse(
+                         HTTP::StatusCode::INTERNAL_SERVER_ERROR);
+      } else {
+        HTTP::StatusCode status;
+        std::string content = FileUtils::readFile(_root_directory, uri, status);
+        if (status != HTTP::StatusCode::OK) {
+          auto errorPageIt = _custom_error_pages.find(status);
+          if (errorPageIt != _custom_error_pages.end()) {
+            HTTP::StatusCode fileStatus;
+            std::string customContent = FileUtils::readFile(
+                _root_directory, errorPageIt->second, fileStatus);
+            if (fileStatus == HTTP::StatusCode::OK) {
+              return HTTP::createFileResponse(status, customContent,
+                                              "text/html");
+            }
+          }
+          return HTTP::createErrorResponse(status);
+        }
+        return HTTP::createFileResponse(status, content,
+                                        HTTP::getMimeType(filePath));
+      }
+      break;
+    case HTTP::Method::POST:
+      if (_cgiHandler.canHandle(filePath)) {
+        std::string cgiResponse = _cgiHandler.executeCGI(uri, request);
+        return !cgiResponse.empty()
+                   ? cgiResponse
+                   : HTTP::createErrorResponse(
+                         HTTP::StatusCode::INTERNAL_SERVER_ERROR);
+      } else {
+        // Handle file upload
+        HTTP::StatusCode status;
+        bool success = false;
+        
+        if (location && location->upload_path.has_value()) {
+          // Use configured upload directory
+          std::string uploadDir = location->upload_path.value();
+          std::string filename = "upload_" + std::to_string(time(nullptr)) + ".txt";
+          std::string uploadPath = "/" + filename;
+          success = FileUtils::writeFile(uploadDir, uploadPath, request.body, status);
+        } else {
+          // Fallback to default behavior
+          success = FileUtils::writeFile(_root_directory, uri, request.body, status);
+        }
+        
+        return HTTP::createSimpleResponse(
+            status, success ? "File uploaded successfully" : "Upload failed");
+      }
+    case HTTP::Method::DELETE: {
+      HTTP::StatusCode status;
+      bool success = FileUtils::deleteFile(_root_directory, uri, status);
+      return HTTP::createSimpleResponse(status, success ? "File deleted"
+                                                        : "Delete failed");
+    }
+    case HTTP::Method::HEAD:
+    case HTTP::Method::PUT:
+    case HTTP::Method::PATCH:
+    default:
+      return HTTP::createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
+    }
+  } catch (const std::exception &e) {
+    std::cerr << "Server error: " << e.what() << std::endl;
+    return HTTP::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
+  }
 }
-
-std::unique_ptr<HTTPResponse> HTTPHandler::handlePOST(const IHTTPRequest& request) {
-    (void)request; // Suppress unused parameter warning
-    // Implement POST handling logic
-    return handleError(HTTP::StatusCode::NOT_IMPLEMENTED);
+void HTTPHandler::setRootDirectory(const std::string &root) {
+  _root_directory = root;
+  _cgiHandler.setRootDirectory(root);
 }
-
-std::unique_ptr<HTTPResponse> HTTPHandler::handleDELETE(const IHTTPRequest& request) {
-    (void)request; // Suppress unused parameter warning
-    // Implement DELETE handling logic here
-    return handleError(HTTP::StatusCode::NOT_IMPLEMENTED);
-}
-
-std::unique_ptr<HTTPResponse> HTTPHandler::handleError(HTTP::StatusCode status) {
-    return _errorHandler.generateErrorResponse(status);
-}
-
-void HTTPHandler::setRootDirectory(const std::string& root) {
-    _root_directory = root;
-    _resourceHandler.setRootDirectory(root);
-    _cgiHandler.setRootDirectory(root);
-    _errorHandler.setRootDirectory(root);
-}
-

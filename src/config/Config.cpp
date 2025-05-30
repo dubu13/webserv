@@ -15,8 +15,10 @@ std::unordered_map<std::string, ServerConfig>& Config::parseConfig() {
         if (line == "server {") {
             ServerConfig serverBlock;
             serverBlock.parseServerBlock(file);
-            std::string key = serverBlock.host + ":" + std::to_string(serverBlock.port);
-            _servers[key] = serverBlock;
+            for (const auto& directive : serverBlock.listenDirectives) {
+                std::string key = directive.first + ":" + std::to_string(directive.second);
+                _servers[key] = serverBlock;
+            }
         }
         else {
             file.close();
@@ -24,5 +26,7 @@ std::unordered_map<std::string, ServerConfig>& Config::parseConfig() {
         }
     }
     file.close();
+    if (_servers.empty())
+        throw std::runtime_error("No valid server blocks found in config file");
     return _servers;
 }

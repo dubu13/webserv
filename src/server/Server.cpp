@@ -1,125 +1,145 @@
 #include "Server.hpp"
-#include "ClientHandler.hpp" // Include here instead of in the header
-#include <arpa/inet.h>
+#include "ClientHandler.hpp"
+#include <cerrno>
 #include <iostream>
+#include <stdexcept>
 
-Server::Server(int port) : _socket(port), _running(false) {
+extern bool g_running;
+
+Server::Server(const ServerConfig& config) 
+    : _server_fd(-1), _config(config), _running(false) {
     if (getrlimit(RLIMIT_NOFILE, &_rlim) == -1) {
         throw std::runtime_error("Failed to get file descriptor limit");
     }
     std::cout << "System allows " << _rlim.rlim_cur << " file descriptors." << std::endl;
-    std::cout << "Server will listen on port " << port << std::endl;
     
-    // Create the ClientHandler after initialization with all required parameters
-    // Use "./www" as default web root and 60 seconds as default timeout
-    _clientHandler = new ClientHandler(_connectionManager, "./www", 60);
+    // Extract port from listen directives for display
+    int port = 8080; // default
+    if (!config.listenDirectives.empty()) {
+        port = config.listenDirectives[0].second;
+    }
+    std::cout << "Server will listen on " << config.host << ":" << port << std::endl;
+    
+    // Create the ClientHandler with configuration
+    _clientHandler = new ClientHandler(*this, config.root, 60);  // TODO: make timeout configurable
 }
 
 Server::~Server() {
-    // Clean up the ClientHandler
-    delete _clientHandler;
+  if (_server_fd >= 0) {
+    close(_server_fd);
+  }
+  delete _clientHandler;
 }
 
-void Server::acceptNewConnection() {
-    if (_clientHandler->getClients().size() >= _rlim.rlim_cur - 10) { //10 is for safety buffer
-        std::cerr << "Max clients reached" << std::endl;
-        // Accept but immediately close connection with error message
-        struct sockaddr_in client_addr;
-        socklen_t addr_len = sizeof(client_addr);
-        int client_fd = accept(_socket.getFd(), (struct sockaddr *)&client_addr, &addr_len);
-        
-        if (client_fd >= 0) {
-            // Send a service unavailable error response
-            _clientHandler->addClient(client_fd, client_addr);
-            _clientHandler->handleClientEvent(ClientHandler::ClientEventType::ERROR, client_fd);
-        }
-        return;
-    }
-    
-    struct sockaddr_in client_addr;
-    socklen_t addr_len = sizeof(client_addr);
-    int client_fd = accept(_socket.getFd(), (struct sockaddr *)&client_addr, &addr_len);
+void Server::setupSocket() {
+  _server_fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (_server_fd == -1) {
+    throw std::runtime_error("Failed to create socket");
+  }
+  int opt = 1;
+  if (setsockopt(_server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+    close(_server_fd);
+    throw std::runtime_error("Failed to set socket options");
+  }
+  _address.sin_family = AF_INET;
+  // Extract port from listen directives
+  int port = 8080; // default
+  if (!_config.listenDirectives.empty()) {
+    port = _config.listenDirectives[0].second;
+  }
+  _address.sin_port = htons(port);
+  if (inet_pton(AF_INET, _config.host.c_str(), &_address.sin_addr) <= 0) {
+    close(_server_fd);
+    throw std::runtime_error("Failed to convert host address");
+  }
+  if (bind(_server_fd, (struct sockaddr *)&_address, sizeof(_address)) < 0) {
+    close(_server_fd);
+    throw std::runtime_error("Failed to bind socket");
+  }
+  if (listen(_server_fd, SOMAXCONN) < 0) {
+    close(_server_fd);
+    throw std::runtime_error("Failed to listen on socket");
+  }
+  setNonBlocking(_server_fd);
+  std::cout << "Socket setup complete" << std::endl;
+}
 
-    if (client_fd < 0) {
-        if (errno != EAGAIN && errno != EWOULDBLOCK)
-            throw SocketException("Failed to accept new connection: " + std::string(strerror(errno)));
-        return;
-    }
+void Server::setNonBlocking(int fd) {
+  int flags = fcntl(fd, F_GETFL, 0);
+  if (flags == -1 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+    throw std::runtime_error("Failed to set non-blocking mode");
+  }
+}
 
+void Server::run() {
+  _running = true;
+  setupSocket();
+  _poller.addFd(_server_fd, POLLIN);
+  
+  // Extract port for display
+  int port = 8080; // default
+  if (!_config.listenDirectives.empty()) {
+    port = _config.listenDirectives[0].second;
+  }
+  std::cout << "Server listening on " << _config.host << ":" << port << std::endl;
+  
+  while (g_running && _running) {
     try {
-        Socket::setNonBlocking(client_fd);
-        
-        // Add client using ClientHandler
-        _clientHandler->addClient(client_fd, client_addr);
-    } catch (const std::exception& e) {
-        // Close the socket if anything went wrong during setup
-        if (close(client_fd) < 0) {
-            std::cerr << "Failed to close client socket: " << strerror(errno) << std::endl;
+      auto active_fds = _poller.poll();
+      for (const auto &pfd : active_fds) {
+        if (isServerSocket(pfd.fd)) {
+          if (_poller.hasActivity(pfd, POLLIN)) {
+            acceptConnection();
+          }
+        } else {
+          handleClientEvent(pfd.fd, pfd.revents);
         }
-        throw; // Re-throw the exception
+      }
+      _clientHandler->checkTimeouts();
+    } catch (const std::exception &e) {
+      std::cerr << "Server error: " << e.what() << std::endl;
     }
+  }
 }
 
-void Server::start() {
-    std::cout << "Server started, waiting for connections..." << std::endl;
-    
-    _running = true;
+void Server::acceptConnection() {
+  struct sockaddr_in client_addr;
+  socklen_t addr_len = sizeof(client_addr);
+  int client_fd =
+      accept(_server_fd, (struct sockaddr *)&client_addr, &addr_len);
+  if (client_fd < 0) {
+    if (errno != EAGAIN && errno != EWOULDBLOCK) {
+      std::cerr << "Accept failed: " << strerror(errno) << std::endl;
+    }
+    return;
+  }
+  if (_clientHandler->getClientCount() >= _rlim.rlim_cur - 10) {
+    close(client_fd);
+    return;
+  }
+  try {
+    setNonBlocking(client_fd);
+    _clientHandler->addClient(client_fd, client_addr);
+  } catch (const std::exception &e) {
+    close(client_fd);
+    std::cerr << "Failed to add client: " << e.what() << std::endl;
+  }
+}
 
-    _socket.createSocket();
-    _socket.setSocketOptions();
-    _socket.bindSocket();
-    _socket.startListening();
-    Socket::setNonBlocking(_socket.getFd());
-
-    _connectionManager.addConnection(_socket.getFd(), POLLIN);
+void Server::handleClientEvent(int fd, short events) {
+  if (events & (POLLERR | POLLHUP)) {
+    _clientHandler->removeClient(fd);
+  } else if (events & POLLIN) {
+    _clientHandler->handleRead(fd);
+  } else if (events & POLLOUT) {
+    _clientHandler->handleWrite(fd);
+  }
 }
 
 void Server::stop() {
-    _running = false;
-    
-    // First disconnect all clients
-    // Get a copy of client file descriptors to avoid modification during iteration
-    const std::unordered_set<int> clients = _clientHandler->getClients();
-    std::vector<int> clientFds(clients.begin(), clients.end());
-    
-    for (size_t i = 0; i < clientFds.size(); i++) {
-        try {
-            _clientHandler->disconnectClient(clientFds[i]);
-        } catch (const std::exception& e) {
-            std::cerr << "Error disconnecting client: " << e.what() << std::endl;
-        }
-    }
-    
-    // Remove the server socket from the connection manager
-    _connectionManager.removeConnection(_socket.getFd());
-    
-    // Close the server socket
-    try {
-        _socket.closeSocket();
-    } catch (const std::exception& e) {
-        std::cerr << "Error closing server socket: " << e.what() << std::endl;
-    }
-    
-    std::cout << "Server stopped." << std::endl;
-}
-
-// Check for client timeouts
-void Server::checkClientTimeouts() {
-    if (_clientHandler) {
-        _clientHandler->checkTimeouts();
-    }
-}
-
-// Implement the methods that delegate to ClientHandler
-void Server::handleClientRead(int clientFd) {
-    _clientHandler->handleClientRead(clientFd);
-}
-
-void Server::handleClientWrite(int clientFd) {
-    _clientHandler->handleClientWrite(clientFd);
-}
-
-// Implement the hasClient method
-bool Server::hasClient(int fd) const {
-    return _clientHandler->hasClient(fd);
+  _running = false;
+  if (_server_fd >= 0) {
+    close(_server_fd);
+    _server_fd = -1;
+  }
 }

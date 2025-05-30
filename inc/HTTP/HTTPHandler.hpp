@@ -1,46 +1,20 @@
 #pragma once
-
+#include "HTTP/HTTP.hpp"
+#include "config/ServerConfig.hpp"
 #include "resource/CGIHandler.hpp"
-#include "errors/ErrorHandler.hpp"
-#include "HTTP/HTTPResponse.hpp"
-#include "HTTP/HTTPTypes.hpp"
-#include "HTTP/IHTTPRequest.hpp"
-#include "resource/ResourceHandler.hpp"
-#include <ctime>
-#include <fstream>
-#include <functional>
+#include "utils/FileUtils.hpp"
 #include <map>
-#include <memory>
 #include <string>
-
 class HTTPHandler {
 private:
-  typedef std::unique_ptr<HTTPResponse> (HTTPHandler::*RequestHandlerFunction)(
-      const IHTTPRequest &);
-
   std::string _root_directory;
-  std::map<HTTP::Method, RequestHandlerFunction> _handlers;
-
-  ErrorHandler _errorHandler;
-  ResourceHandler _resourceHandler;
+  std::map<HTTP::StatusCode, std::string> _custom_error_pages;
   CGIHandler _cgiHandler;
-
-  std::string sanitizeFilename(const std::string &filename);
-  std::string extractFilenameFromRequest(const IHTTPRequest &request);
-
+  const ServerConfig *_config;
 public:
-  HTTPHandler(const std::string &root = "./www");
+  HTTPHandler(const std::string &root = "./www",
+              const ServerConfig *config = nullptr);
   ~HTTPHandler();
-
-  std::unique_ptr<HTTPResponse> handleRequest(const std::string &requestData);
-  std::unique_ptr<HTTPResponse> handleGET(const IHTTPRequest &request);
-  std::unique_ptr<HTTPResponse> handlePOST(const IHTTPRequest &request);
-  std::unique_ptr<HTTPResponse> handleDELETE(const IHTTPRequest &request);
-
-  std::unique_ptr<HTTPResponse> handleError(HTTP::StatusCode status);
-
+  std::string handleRequest(const std::string &requestData);
   void setRootDirectory(const std::string &root);
-
-  ResourceHandler &getResourceHandler() { return _resourceHandler; }
-  ErrorHandler &getErrorHandler() { return _errorHandler; }
 };

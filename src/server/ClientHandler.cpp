@@ -1,244 +1,222 @@
 #include "ClientHandler.hpp"
-#include <arpa/inet.h>
-#include <unistd.h>
+#include "Server.hpp"
+#include <cerrno>
+#include <cstring>
 #include <iostream>
-#include <errno.h>
-#include <cstring> // For strerror function
-#include "Client.hpp"
+#include <unistd.h>
 
-ClientHandler::ClientHandler(ConnectionManager& connectionManager, const std::string& webRoot, time_t clientTimeout)
-    : _connectionManager(connectionManager), _httpHandler(webRoot), _clientTimeout(clientTimeout) {
-    // Initialize the event handler map
-    _eventHandlers[ClientEventType::READ] = &ClientHandler::handleRead;
-    _eventHandlers[ClientEventType::WRITE] = &ClientHandler::handleWrite;
-    _eventHandlers[ClientEventType::ERROR] = &ClientHandler::handleError;
-    _eventHandlers[ClientEventType::TIMEOUT] = &ClientHandler::handleTimeout;
-    
-    // Get reference to the ResourceHandler from HTTPHandler
-    _resourceHandler = &_httpHandler.getResourceHandler();
-}
+ClientHandler::ClientHandler(Server &server, const std::string &webRoot, time_t timeout)
+    : _server(server), _httpHandler(webRoot, &server.getConfig()), _timeout(timeout) {}
 
 ClientHandler::~ClientHandler() {
-    // Close all client connections
-    std::map<int, Client>::iterator it;
-    for (it = _clients.begin(); it != _clients.end(); ++it) {
-        int fd = it->first;
-        try {
-            if (close(fd) < 0) {
-                std::cerr << "Failed to close client socket: " << strerror(errno) << std::endl;
-            }
-        } catch (const std::exception& e) {
-            std::cerr << "Error closing client socket: " << e.what() << std::endl;
-        }
-    }
-    _clients.clear();
+  for (auto &pair : _clients) {
+    close(pair.first);
+  }
 }
 
-void ClientHandler::addClient(int clientFd, const struct sockaddr_in& clientAddr) {
-    std::cout << "DEBUG: Starting addClient(" << clientFd << ")" << std::endl;
-    
-    // Create new client and add to map
-    std::pair<std::map<int, Client>::iterator, bool> result = 
-        _clients.insert(std::make_pair(clientFd, Client(clientFd, clientAddr)));
-    
-    std::cout << "DEBUG: Client inserted into map" << std::endl;
-    
-    // Add new client to poll monitoring
-    _connectionManager.addConnection(clientFd, POLLIN);
-    
-    std::cout << "DEBUG: Client added to connection manager" << std::endl;
-    
-    // Use the iterator from insert to access the client safely
-    Client& client = result.first->second;
-    std::cout << "New connection from " << client.getIpAddress() << ":" 
-              << client.getPort() << " fd: " << clientFd << std::endl;
-    
-    std::cout << "DEBUG: addClient() completed successfully" << std::endl;
+bool ClientHandler::hasCompleteRequest(const std::string &data) const {
+  size_t pos = data.find("\r\n\r\n");
+  if (pos == std::string::npos) return false;
+  
+  // Check if it's a POST request with Content-Length
+  size_t contentLengthPos = data.find("Content-Length:");
+  if (contentLengthPos != std::string::npos && contentLengthPos < pos) {
+    size_t valueStart = data.find(":", contentLengthPos) + 1;
+    size_t valueEnd = data.find("\r\n", valueStart);
+    if (valueEnd != std::string::npos) {
+      std::string lengthStr = data.substr(valueStart, valueEnd - valueStart);
+      // Trim whitespace
+      lengthStr.erase(0, lengthStr.find_first_not_of(" \t"));
+      lengthStr.erase(lengthStr.find_last_not_of(" \t") + 1);
+      
+      try {
+        size_t contentLength = std::stoul(lengthStr);
+        size_t headerEnd = pos + 4;
+        return data.length() >= headerEnd + contentLength;
+      } catch (...) {
+        return false;
+      }
+    }
+  }
+  
+  return true; // GET requests and others without body
 }
 
-void ClientHandler::disconnectClient(int clientFd) {
-    // Remove from connection manager first
-    _connectionManager.removeConnection(clientFd);
-    
-    // Find the client in the map
-    std::map<int, Client>::iterator it = _clients.find(clientFd);
-    if (it == _clients.end()) {
-        throw std::runtime_error("Attempted to disconnect non-existent client");
+ssize_t ClientHandler::readClientData(int fd, std::string &incomingData, size_t maxSize) {
+  char buffer[8192];
+  ssize_t bytesRead = recv(fd, buffer, sizeof(buffer), MSG_DONTWAIT);
+  
+  if (bytesRead > 0) {
+    if (incomingData.length() + bytesRead > maxSize) {
+      return -2; // Payload too large
     }
-    
-    // Close the socket
-    if (close(clientFd) < 0) {
-        throw std::runtime_error("Failed to close client socket: " + std::string(strerror(errno)));
-    }
-    
-    // Remove from client map
+    incomingData.append(buffer, bytesRead);
+  } else if (bytesRead == 0) {
+    return 0; // Connection closed
+  } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
+    return -1; // Error
+  }
+  
+  return bytesRead;
+}
+
+ssize_t ClientHandler::writeClientData(int fd, std::string &outgoingData) {
+  if (outgoingData.empty()) return 0;
+  
+  ssize_t bytesSent = send(fd, outgoingData.c_str(), outgoingData.length(), MSG_DONTWAIT);
+  
+  if (bytesSent > 0) {
+    outgoingData.erase(0, bytesSent);
+  } else if (bytesSent == 0) {
+    return 0; // Connection closed
+  } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
+    return -1; // Error
+  }
+  
+  return bytesSent;
+}
+
+void ClientHandler::addClient(int fd, const struct sockaddr_in &addr) {
+  auto result = _clients.emplace(fd, ClientData(fd, addr));
+  _server.getPoller().addFd(fd, POLLIN);
+  ClientData &client = result.first->second;
+  std::cout << "Client connected: " << client.getIpAddress() << ":" 
+            << client.getPort() << " (fd: " << fd << ")" << std::endl;
+}
+void ClientHandler::removeClient(int fd) {
+  auto it = _clients.find(fd);
+  if (it != _clients.end()) {
+    _server.getPoller().removeFd(fd);
+    close(fd);
     _clients.erase(it);
-    
-    std::cout << "Client disconnected, fd: " << clientFd << std::endl;
+    std::cout << "Client disconnected (fd: " << fd << ")" << std::endl;
+  }
 }
 
-bool ClientHandler::hasClient(int clientFd) const {
-    return _clients.find(clientFd) != _clients.end();
+bool ClientHandler::hasClient(int fd) const {
+  return _clients.find(fd) != _clients.end();
 }
 
-const std::unordered_set<int>& ClientHandler::getClients() const {
-    return _clientFds;
+size_t ClientHandler::getClientCount() const { 
+  return _clients.size(); 
+}
+
+void ClientHandler::handleRead(int fd) {
+  auto it = _clients.find(fd);
+  if (it == _clients.end()) return;
+  
+  ClientData &client = it->second;
+  size_t maxBodySize = _server.getConfig().client_max_body_size;
+  
+  ssize_t bytes = readClientData(fd, client.incomingData, maxBodySize);
+  
+  if (bytes < 0) {
+    if (bytes == -2) {
+      std::string errorResponse = HTTP::createErrorResponse(HTTP::StatusCode::PAYLOAD_TOO_LARGE);
+      client.outgoingData = errorResponse;
+      _server.getPoller().setFdEvents(fd, POLLOUT);
+      return;
+    } else if (bytes == -1) {
+      std::string errorResponse = HTTP::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
+      client.outgoingData = errorResponse;
+      _server.getPoller().setFdEvents(fd, POLLOUT);
+      return;
+    }
+  } else if (bytes == 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+    removeClient(fd);
+    return;
+  }
+  
+  if (bytes > 0) {
+    client.updateActivity();
+  }
+  
+  if (hasCompleteRequest(client.incomingData)) {
+    processRequest(fd, client);
+  } else if (client.hasDataToWrite()) {
+    _server.getPoller().setFdEvents(fd, POLLIN | POLLOUT);
+  }
+}
+void ClientHandler::handleWrite(int fd) {
+  auto it = _clients.find(fd);
+  if (it == _clients.end()) return;
+  
+  ClientData &client = it->second;
+  
+  if (!client.hasDataToWrite()) {
+    _server.getPoller().setFdEvents(fd, POLLIN);
+    if (!client.keepAlive) {
+      removeClient(fd);
+    }
+    return;
+  }
+  
+  ssize_t bytes = writeClientData(fd, client.outgoingData);
+  
+  if (bytes <= 0) {
+    if (bytes == 0 || (errno != EAGAIN && errno != EWOULDBLOCK)) {
+      removeClient(fd);
+    }
+    return;
+  }
+  
+  if (bytes > 0) {
+    client.updateActivity();
+  }
+  
+  if (!client.hasDataToWrite()) {
+    _server.getPoller().setFdEvents(fd, POLLIN);
+    if (!client.keepAlive) {
+      removeClient(fd);
+    }
+  }
+}
+
+void ClientHandler::processRequest(int fd, ClientData &client) {
+  try {
+    std::string response = _httpHandler.handleRequest(client.incomingData);
+    client.outgoingData = response;
+    client.incomingData.clear();
+    _server.getPoller().setFdEvents(fd, POLLOUT);
+  } catch (const std::exception &e) {
+    std::cerr << "Request processing error: " << e.what() << std::endl;
+    sendError(fd, 500);
+  }
+}
+
+void ClientHandler::sendError(int fd, int status) {
+  auto it = _clients.find(fd);
+  if (it == _clients.end()) return;
+  
+  try {
+    std::string response = HTTP::createErrorResponse(static_cast<HTTP::StatusCode>(status));
+    it->second.outgoingData = response;
+    _server.getPoller().setFdEvents(fd, POLLOUT);
+  } catch (const std::exception &e) {
+    removeClient(fd);
+  }
 }
 
 void ClientHandler::checkTimeouts() {
-    // Create a list of clients to disconnect to avoid modifying the map during iteration
-    std::vector<int> timeoutFds;
+  std::vector<int> timedOut;
+  time_t currentTime = time(NULL);
+  
+  for (const auto &pair : _clients) {
+    const ClientData &client = pair.second;
+    time_t idleTime = currentTime - client.lastActivity;
+    time_t timeoutLimit = _timeout;
     
-    std::map<int, Client>::const_iterator it;
-    for (it = _clients.begin(); it != _clients.end(); ++it) {
-        if (it->second.hasTimedOut(_clientTimeout)) {
-            timeoutFds.push_back(it->first);
-        }
-    }
-    
-    // Disconnect timed out clients
-    for (size_t i = 0; i < timeoutFds.size(); ++i) {
-        handleClientEvent(ClientEventType::TIMEOUT, timeoutFds[i]);
-    }
-}
-
-// Main event handler function that uses the function pointer map
-void ClientHandler::handleClientEvent(ClientEventType eventType, int clientFd) {
-    auto handlerIt = _eventHandlers.find(eventType);
-    if (handlerIt != _eventHandlers.end()) {
-        // Call the correct handler function through the function pointer
-        (this->*(handlerIt->second))(clientFd);
-    } else {
-        std::cerr << "No handler registered for event type on client " << clientFd << std::endl;
-    }
-}
-
-// Individual event handlers
-void ClientHandler::handleRead(int clientFd) {
-    std::map<int, Client>::iterator it = _clients.find(clientFd);
-    if (it == _clients.end()) {
-        std::cerr << "Attempted to read from non-existent client: " << clientFd << std::endl;
-        return;
-    }
-    
-    Client& client = it->second;
-    ssize_t bytes_read = client.readData();
-    std::cout << "Read " << bytes_read << " bytes from client " << clientFd << std::endl;
-
-    if (bytes_read < 0) {
-        if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            // Using error handling system for read errors
-            sendErrorResponse(clientFd, HTTP::StatusCode::INTERNAL_SERVER_ERROR);
-            std::cerr << "Failed to read from client socket: " << strerror(errno) << std::endl;
-            return;
-        }
-        return;
-    }
-    
-    if (bytes_read == 0) {
-        std::cout << "Client " << clientFd << " disconnected." << std::endl;
-        disconnectClient(clientFd);
-        return;
-    }
-
-    // Check if we have a complete HTTP request
-    if (client.hasCompleteRequest()) {
-        std::cout << "Complete HTTP request received" << std::endl;
-        
-        try {
-            // Use the HTTPHandler to process the request
-            auto response = _httpHandler.handleRequest(client.getIncomingData());
-            
-            // Store the response for sending
-            client.setOutgoingData(response->generateResponse());
-            
-            // Switch to write mode
-            _connectionManager.removeConnection(clientFd);
-            _connectionManager.addConnection(clientFd, POLLOUT);
-        } catch (const std::exception& e) {
-            // Use the error handling system for any exceptions during request processing
-            std::cerr << "Error processing request: " << e.what() << std::endl;
-            sendErrorResponse(clientFd, HTTP::StatusCode::INTERNAL_SERVER_ERROR);
-        }
-        
-        // Clear the incoming data buffer
-        client.clearIncomingData();
-    }
-}
-
-void ClientHandler::handleWrite(int clientFd) {
-    std::map<int, Client>::iterator it = _clients.find(clientFd);
-    if (it == _clients.end()) {
-        std::cerr << "Attempted to write to non-existent client: " << clientFd << std::endl;
-        return;
-    }
-    
-    Client& client = it->second;
-    
-    if (!client.hasDataToWrite()) {
-        return;
-    }
-
-    ssize_t bytes_written = client.writeData();
-
-    if (bytes_written < 0) {
-        if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            std::cerr << "Failed to write to client socket: " << strerror(errno) << std::endl;
-            sendErrorResponse(clientFd, HTTP::StatusCode::INTERNAL_SERVER_ERROR);
-            return;
-        }
-        return;
-    }
-    
-    if (bytes_written == 0) {
-        std::cout << "Client " << clientFd << " disconnected." << std::endl;
-        disconnectClient(clientFd);
-        return;
-    }
-
     if (client.hasDataToWrite()) {
-        // Still has data to write, make sure we're in write mode
-        _connectionManager.removeConnection(clientFd);
-        _connectionManager.addConnection(clientFd, POLLOUT);
-    } else {
-        // All data sent, switch back to read mode for next request
-        _connectionManager.removeConnection(clientFd);
-        _connectionManager.addConnection(clientFd, POLLIN);
-        std::cout << "Data sent to client " << clientFd << std::endl;
-        
-        // If the client didn't request keep-alive, disconnect
-        if (!client.isKeepAlive()) {
-            disconnectClient(clientFd);
-        }
-    }
-}
-
-void ClientHandler::handleError(int clientFd) {
-    std::cerr << "Error occurred with client " << clientFd << std::endl;
-    disconnectClient(clientFd);
-}
-
-void ClientHandler::handleTimeout(int clientFd) {
-    std::cout << "Connection timeout for client " << clientFd << std::endl;
-    disconnectClient(clientFd);
-}
-
-// Helper method for sending error responses
-void ClientHandler::sendErrorResponse(int clientFd, HTTP::StatusCode status) {
-    std::map<int, Client>::iterator it = _clients.find(clientFd);
-    if (it == _clients.end()) {
-        std::cerr << "Attempted to send error to non-existent client: " << clientFd << std::endl;
-        return;
+      timeoutLimit = _timeout / 2;
     }
     
-    // Use HTTPHandler's error handler
-    auto errorResponse = _httpHandler.handleError(status);
-    std::string responseStr = errorResponse->generateResponse();
-    
-    // Set the response in the client
-    it->second.setOutgoingData(responseStr);
-    
-    // Switch socket to write mode
-    _connectionManager.removeConnection(clientFd);
-    _connectionManager.addConnection(clientFd, POLLOUT);
+    if (idleTime > timeoutLimit) {
+      timedOut.push_back(pair.first);
+    }
+  }
+  
+  for (int fd : timedOut) {
+    std::cout << "Client timeout (fd: " << fd << ")" << std::endl;
+    removeClient(fd);
+  }
 }

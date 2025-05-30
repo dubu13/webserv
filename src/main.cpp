@@ -1,82 +1,50 @@
 #include "Server.hpp"
-#include "HTTPGetRequest.hpp"
-#include "IHTTPRequest.hpp"
-#include "ConnectionManager.hpp"
-#include "Socket.hpp" 
+#include "config/ServerConfig.hpp"
 #include <csignal>
-#include <string>
+#include <fstream>
 #include <iostream>
-
 bool g_running = true;
-
 void signalHandler(int signum) {
-    (void)signum; // Unused parameter
-    g_running = false;
+  (void)signum;
+  g_running = false;
 }
-
-int main() {
-    try {
-        signal(SIGINT, signalHandler);
-
-        Server server(8080);  // Initialize with port
-        std::cout << "Server started successfully" << std::endl;
-        server.start();
-        
-        // Use the server's connection manager
-        ConnectionManager& connectionManager = server.getConnectionManager();
-
-        // Add server socket to poll fds
-        connectionManager.addConnection(server.getSocketFd(), POLLIN);
-
-        while (g_running) {
-            try {
-                // Check for active connections
-                std::vector<struct pollfd> active_fds = connectionManager.checkConnection();
-                
-                // Process active connections
-                for (size_t i = 0; i < active_fds.size(); i++) {
-                    struct pollfd& pfd = active_fds[i]; // Use reference to non-const
-                    
-                    if (server.isServerSocket(pfd.fd)) {
-                        // Server socket is active, accept new connection
-                        if (connectionManager.hasActivity(&pfd, POLLIN)) {
-                            server.acceptNewConnection();
-                        }
-                    } else {
-                        // Client socket is active
-                        if (connectionManager.hasActivity(&pfd, POLLIN)) {
-                            // Client has data to read
-                            server.handleClientRead(pfd.fd);
-                        } else if (connectionManager.hasActivity(&pfd, POLLOUT)) {
-                            // Client is ready for writing
-                            server.handleClientWrite(pfd.fd);
-                        }
-                    }
-                }
-                
-                usleep(10000); // Small delay to prevent CPU hogging
-            }
-            catch (const SocketException& e) {
-                std::cerr << "Socket error: " << e.what() << std::endl;
-            }
-            catch (const HTTPParseException& e) {
-                std::cerr << "HTTP parsing error: " << e.what() << std::endl;
-            }
-            catch (const std::exception &e) {
-                std::cerr << "Error in server loop: " << e.what() << std::endl;
-            }
-        }
-
-        server.stop();
-        std::cout << "Server stopped successfully" << std::endl;
+ServerConfig loadDefaultConfig(const std::string &configFile) {
+  ServerConfig config;
+  std::ifstream file(configFile);
+  if (!file.is_open()) {
+    std::cout << "Could not open config file: " << configFile
+              << ", using default configuration" << std::endl;
+    return config;
+  }
+  std::string line;
+  while (std::getline(file, line)) {
+    if (line.empty() || line[0] == '#')
+      continue;
+    if (line == "server {") {
+      config.parseServerBlock(file);
+      break;
     }
-    catch (const SocketException& e) {
-        std::cerr << "Fatal socket error: " << e.what() << std::endl;
-        return 1;
-    }
-    catch (const std::exception &e) {
-        std::cerr << "Fatal error: " << e.what() << std::endl;
-        return 1;
-    }
-    return 0;
+  }
+  return config;
+}
+int main(int argc, char *argv[]) {
+  try {
+    signal(SIGINT, signalHandler);
+    std::string configFile = (argc > 1) ? argv[1] : "config/default.conf";
+    ServerConfig config = loadDefaultConfig(configFile);
+    std::cout << "Using configuration:" << std::endl;
+    std::cout << "  Host: " << config.host << std::endl;
+    std::cout << "  Port: " << config.port << std::endl;
+    std::cout << "  Root: " << config.root << std::endl;
+    std::cout << "  Max body size: " << config.client_max_body_size
+              << std::endl;
+    Server server(config);
+    std::cout << "Starting webserver..." << std::endl;
+    server.run();
+    std::cout << "Server stopped successfully" << std::endl;
+  } catch (const std::exception &e) {
+    std::cerr << "Fatal error: " << e.what() << std::endl;
+    return 1;
+  }
+  return 0;
 }
