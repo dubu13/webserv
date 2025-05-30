@@ -1,5 +1,6 @@
 #include "ClientHandler.hpp"
 #include "Server.hpp"
+#include "utils/Logger.hpp"
 #include <cerrno>
 #include <cstring>
 #include <iostream>
@@ -80,8 +81,8 @@ void ClientHandler::addClient(int fd, const struct sockaddr_in &addr) {
   auto result = _clients.emplace(fd, ClientData(fd, addr));
   _server.getPoller().addFd(fd, POLLIN);
   ClientData &client = result.first->second;
-  std::cout << "Client connected: " << client.getIpAddress() << ":" 
-            << client.getPort() << " (fd: " << fd << ")" << std::endl;
+  Logger::infof("Client connected: %s:%d (fd: %d)", 
+                client.getIpAddress().c_str(), client.getPort(), fd);
 }
 void ClientHandler::removeClient(int fd) {
   auto it = _clients.find(fd);
@@ -89,7 +90,7 @@ void ClientHandler::removeClient(int fd) {
     _server.getPoller().removeFd(fd);
     close(fd);
     _clients.erase(it);
-    std::cout << "Client disconnected (fd: " << fd << ")" << std::endl;
+    Logger::infof("Client disconnected (fd: %d)", fd);
   }
 }
 
@@ -179,7 +180,7 @@ void ClientHandler::processRequest(int fd, ClientData &client) {
     client.incomingData.clear();
     _server.getPoller().setFdEvents(fd, POLLOUT);
   } catch (const std::exception &e) {
-    std::cerr << "Request processing error: " << e.what() << std::endl;
+    Logger::errorf("Request processing error: %s", e.what());
     sendError(fd, 500);
   }
 }
@@ -216,7 +217,7 @@ void ClientHandler::checkTimeouts() {
   }
   
   for (int fd : timedOut) {
-    std::cout << "Client timeout (fd: " << fd << ")" << std::endl;
+    Logger::infof("Client timeout (fd: %d)", fd);
     removeClient(fd);
   }
 }

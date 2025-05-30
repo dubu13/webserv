@@ -1,5 +1,6 @@
 #include "utils/FileUtils.hpp"
 #include "utils/FileCache.hpp"
+#include "utils/Logger.hpp"
 #include <fstream>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -12,8 +13,11 @@ static FileCache fileCache(100); // Cache up to 100 files
 
 std::string readFile(const std::string &rootDir, const std::string &uri, HTTP::StatusCode &status) {
     std::string filePath = buildPath(rootDir, uri);
+    Logger::debugf("FileUtils::readFile - rootDir: %s, uri: %s, built path: %s", 
+                   rootDir.c_str(), uri.c_str(), filePath.c_str());
     
     if (!isPathSafe(uri)) {
+        Logger::warnf("Unsafe path detected: %s", uri.c_str());
         status = HTTP::StatusCode::FORBIDDEN;
         return "";
     }
@@ -21,19 +25,24 @@ std::string readFile(const std::string &rootDir, const std::string &uri, HTTP::S
     // Try to get from cache first
     std::string content, mimeType;
     if (fileCache.getFile(filePath, content, mimeType)) {
+        Logger::debugf("File found in cache: %s", filePath.c_str());
         status = HTTP::StatusCode::OK;
         return content;
     }
     
     // If not in cache, read from file
+    Logger::debugf("Attempting to open file: %s", filePath.c_str());
     std::ifstream file(filePath, std::ios::binary);
     if (!file.is_open()) {
+        Logger::warnf("Failed to open file: %s", filePath.c_str());
         status = HTTP::StatusCode::NOT_FOUND;
         return "";
     }
     
     content = std::string((std::istreambuf_iterator<char>(file)), 
                          std::istreambuf_iterator<char>());
+    
+    Logger::debugf("Successfully read %zu bytes from file: %s", content.size(), filePath.c_str());
     
     // Cache the file content
     fileCache.cacheFile(filePath, content, "text/html"); // Default MIME type

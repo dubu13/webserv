@@ -1,5 +1,6 @@
 #include "Server.hpp"
 #include "ClientHandler.hpp"
+#include "utils/Logger.hpp"
 #include <cerrno>
 #include <iostream>
 #include <stdexcept>
@@ -11,14 +12,14 @@ Server::Server(const ServerBlock& config)
     if (getrlimit(RLIMIT_NOFILE, &_rlim) == -1) {
         throw std::runtime_error("Failed to get file descriptor limit");
     }
-    std::cout << "System allows " << _rlim.rlim_cur << " file descriptors." << std::endl;
+    Logger::infof("System allows %ld file descriptors", _rlim.rlim_cur);
     
     // Extract port from listen directives for display
     int port = 8080; // default
     if (!config.listenDirectives.empty()) {
         port = config.listenDirectives[0].second;
     }
-    std::cout << "Server will listen on " << config.host << ":" << port << std::endl;
+    Logger::infof("Server will listen on %s:%d", config.host.c_str(), port);
     
     // Create the ClientHandler with configuration
     _clientHandler = new ClientHandler(*this, config.root, 60);  // TODO: make timeout configurable
@@ -61,7 +62,7 @@ void Server::setupSocket() {
     throw std::runtime_error("Failed to listen on socket");
   }
   setNonBlocking(_server_fd);
-  std::cout << "Socket setup complete" << std::endl;
+  Logger::info("Socket setup complete");
 }
 
 void Server::setNonBlocking(int fd) {
@@ -81,7 +82,7 @@ void Server::run() {
   if (!_config.listenDirectives.empty()) {
     port = _config.listenDirectives[0].second;
   }
-  std::cout << "Server listening on " << _config.host << ":" << port << std::endl;
+  Logger::infof("Server listening on %s:%d", _config.host.c_str(), port);
   
   while (g_running && _running) {
     try {
@@ -97,7 +98,7 @@ void Server::run() {
       }
       _clientHandler->checkTimeouts();
     } catch (const std::exception &e) {
-      std::cerr << "Server error: " << e.what() << std::endl;
+      Logger::errorf("Server error: %s", e.what());
     }
   }
 }
@@ -109,7 +110,7 @@ void Server::acceptConnection() {
       accept(_server_fd, (struct sockaddr *)&client_addr, &addr_len);
   if (client_fd < 0) {
     if (errno != EAGAIN && errno != EWOULDBLOCK) {
-      std::cerr << "Accept failed: " << strerror(errno) << std::endl;
+      Logger::errorf("Accept failed: %s", strerror(errno));
     }
     return;
   }
@@ -122,7 +123,7 @@ void Server::acceptConnection() {
     _clientHandler->addClient(client_fd, client_addr);
   } catch (const std::exception &e) {
     close(client_fd);
-    std::cerr << "Failed to add client: " << e.what() << std::endl;
+    Logger::errorf("Failed to add client: %s", e.what());
   }
 }
 

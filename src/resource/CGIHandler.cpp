@@ -1,5 +1,6 @@
 #include "CGIHandler.hpp"
 #include "HTTP/HTTP.hpp"
+#include "utils/Logger.hpp"
 #include <iostream>
 CGIHandler::CGIHandler(const std::string &root) : _root_directory(root) {
   registerHandler(".php", "/usr/bin/php");
