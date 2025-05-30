@@ -3,7 +3,9 @@
 #include <cerrno>
 #include <iostream>
 #include <stdexcept>
+
 extern bool g_running;
+
 Server::Server(const ServerConfig &config)
     : _server_fd(-1), _config(config), _running(false) {
   memset(&_address, 0, sizeof(_address));
@@ -12,12 +14,14 @@ Server::Server(const ServerConfig &config)
   }
   _clientHandler = new ClientHandler(*this, _config.root, 60);
 }
+
 Server::~Server() {
   if (_server_fd >= 0) {
     close(_server_fd);
   }
   delete _clientHandler;
 }
+
 void Server::setupSocket() {
   _server_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (_server_fd == -1) {
@@ -46,12 +50,14 @@ void Server::setupSocket() {
   std::cout << "Server listening on " << _config.host << ":" << _config.port
             << std::endl;
 }
+
 void Server::setNonBlocking(int fd) {
   int flags = fcntl(fd, F_GETFL, 0);
   if (flags == -1 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
     throw std::runtime_error("Failed to set non-blocking mode");
   }
 }
+
 void Server::run() {
   _running = true;
   setupSocket();
@@ -76,6 +82,7 @@ void Server::run() {
     }
   }
 }
+
 void Server::acceptConnection() {
   struct sockaddr_in client_addr;
   socklen_t addr_len = sizeof(client_addr);
@@ -99,6 +106,7 @@ void Server::acceptConnection() {
     std::cerr << "Failed to add client: " << e.what() << std::endl;
   }
 }
+
 void Server::handleClientEvent(int fd, short events) {
   if (events & (POLLERR | POLLHUP)) {
     _clientHandler->removeClient(fd);
@@ -108,6 +116,7 @@ void Server::handleClientEvent(int fd, short events) {
     _clientHandler->handleWrite(fd);
   }
 }
+
 void Server::stop() {
   _running = false;
   if (_server_fd >= 0) {

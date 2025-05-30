@@ -21,7 +21,6 @@ private:
   bool _running;
   void setupSocket();
   void setNonBlocking(int fd);
-
 public:
   Server(const ServerConfig &config);
   ~Server();

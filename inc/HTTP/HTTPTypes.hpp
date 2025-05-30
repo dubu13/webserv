@@ -11,6 +11,7 @@ enum class StatusCode {
   NOT_FOUND = 404,
   METHOD_NOT_ALLOWED = 405,
   CONFLICT = 409,
+  PAYLOAD_TOO_LARGE = 413,
   INTERNAL_SERVER_ERROR = 500,
   NOT_IMPLEMENTED = 501
 };
@@ -24,4 +25,5 @@ Method stringToMethod(const std::string &method);
 std::string methodToString(Method method);
 std::string statusToString(StatusCode status);
 std::string versionToString(Version version);
-} // namespace HTTP
+std::string getMimeType(const std::string &path);
+}

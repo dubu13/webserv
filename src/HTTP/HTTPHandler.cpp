@@ -1,5 +1,7 @@
 #include "HTTP/HTTPHandler.hpp"
+#include "utils/FileUtils.hpp"
 #include <iostream>
+#include <ctime>
 HTTPHandler::HTTPHandler(const std::string &root, const ServerConfig *config)
     : _root_directory(root), _cgiHandler(root), _config(config) {
   if (_config && !_config->error_pages.empty()) {
@@ -14,6 +16,8 @@ HTTPHandler::HTTPHandler(const std::string &root, const ServerConfig *config)
         "/errors/500.html";
     _custom_error_pages[HTTP::StatusCode::METHOD_NOT_ALLOWED] =
         "/errors/405.html";
+    _custom_error_pages[HTTP::StatusCode::PAYLOAD_TOO_LARGE] =
+        "/errors/413.html";
   }
 }
 HTTPHandler::~HTTPHandler() {}
@@ -24,6 +28,28 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
       return HTTP::createErrorResponse(HTTP::StatusCode::BAD_REQUEST);
     }
     std::string uri = request.requestLine.uri;
+    
+    // Get location configuration for this URI
+    const LocationConfig *location = nullptr;
+    if (_config) {
+      location = _config->getLocation(uri);
+    }
+    
+    // Check if method is allowed for this location
+    if (location && !location->allowed_methods.empty()) {
+      std::string methodStr;
+      switch (request.requestLine.method) {
+        case HTTP::Method::GET: methodStr = "GET"; break;
+        case HTTP::Method::POST: methodStr = "POST"; break;
+        case HTTP::Method::DELETE: methodStr = "DELETE"; break;
+        default: methodStr = "UNKNOWN"; break;
+      }
+      
+      if (location->allowed_methods.find(methodStr) == location->allowed_methods.end()) {
+        return HTTP::createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
+      }
+    }
+    
     std::string filePath = _root_directory + uri;
     switch (request.requestLine.method) {
     case HTTP::Method::GET:
@@ -35,12 +61,12 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
                          HTTP::StatusCode::INTERNAL_SERVER_ERROR);
       } else {
         HTTP::StatusCode status;
-        std::string content = FileOps::readFile(_root_directory, uri, status);
+        std::string content = FileUtils::readFile(_root_directory, uri, status);
         if (status != HTTP::StatusCode::OK) {
           auto errorPageIt = _custom_error_pages.find(status);
           if (errorPageIt != _custom_error_pages.end()) {
             HTTP::StatusCode fileStatus;
-            std::string customContent = FileOps::readFile(
+            std::string customContent = FileUtils::readFile(
                 _root_directory, errorPageIt->second, fileStatus);
             if (fileStatus == HTTP::StatusCode::OK) {
               return HTTP::createFileResponse(status, customContent,
@@ -50,8 +76,9 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
           return HTTP::createErrorResponse(status);
         }
         return HTTP::createFileResponse(status, content,
-                                        FileOps::getMimeType(filePath));
+                                        HTTP::getMimeType(filePath));
       }
+      break;
     case HTTP::Method::POST:
       if (_cgiHandler.canHandle(filePath)) {
         std::string cgiResponse = _cgiHandler.executeCGI(uri, request);
@@ -60,15 +87,27 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
                    : HTTP::createErrorResponse(
                          HTTP::StatusCode::INTERNAL_SERVER_ERROR);
       } else {
+        // Handle file upload
         HTTP::StatusCode status;
-        bool success =
-            FileOps::writeFile(_root_directory, uri, request.body, status);
+        bool success = false;
+        
+        if (location && location->upload_path.has_value()) {
+          // Use configured upload directory
+          std::string uploadDir = location->upload_path.value();
+          std::string filename = "upload_" + std::to_string(time(nullptr)) + ".txt";
+          std::string uploadPath = "/" + filename;
+          success = FileUtils::writeFile(uploadDir, uploadPath, request.body, status);
+        } else {
+          // Fallback to default behavior
+          success = FileUtils::writeFile(_root_directory, uri, request.body, status);
+        }
+        
         return HTTP::createSimpleResponse(
             status, success ? "File uploaded successfully" : "Upload failed");
       }
     case HTTP::Method::DELETE: {
       HTTP::StatusCode status;
-      bool success = FileOps::deleteFile(_root_directory, uri, status);
+      bool success = FileUtils::deleteFile(_root_directory, uri, status);
       return HTTP::createSimpleResponse(status, success ? "File deleted"
                                                         : "Delete failed");
     }

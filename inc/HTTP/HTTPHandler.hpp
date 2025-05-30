@@ -2,7 +2,7 @@
 #include "HTTP/HTTP.hpp"
 #include "config/ServerConfig.hpp"
 #include "resource/CGIHandler.hpp"
-#include "resource/FileHandler.hpp"
+#include "utils/FileUtils.hpp"
 #include <map>
 #include <string>
 class HTTPHandler {
@@ -11,7 +11,6 @@ private:
   std::map<HTTP::StatusCode, std::string> _custom_error_pages;
   CGIHandler _cgiHandler;
   const ServerConfig *_config;
-
 public:
   HTTPHandler(const std::string &root = "./www",
               const ServerConfig *config = nullptr);

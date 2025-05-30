@@ -9,7 +9,6 @@ private:
   std::string executeScript(const std::string &script_path,
                             const std::string &handler_path,
                             const HTTP::Request &request);
-
 public:
   CGIHandler(const std::string &root = "./www");
   ~CGIHandler();
