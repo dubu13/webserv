@@ -7,7 +7,7 @@ ServerConfig::ServerConfig() : _maxAllowedBodySize(1024 * 1024 * 1024) {
         {"server_name", ServerDirective::SERVER_NAME},
         {"root", ServerDirective::ROOT},
         {"index", ServerDirective::INDEX},
-        {"error_pages", ServerDirective::ERROR_PAGES},
+        {"error_page", ServerDirective::ERROR_PAGES},
         {"client_max_body_size", ServerDirective::CLIENT_MAX_BODY_SIZE},
         {"location", ServerDirective::LOCATION}
     };
@@ -64,7 +64,7 @@ void ServerConfig::parseServerBlock(std::ifstream &file) {
         if (line.empty() || line[0] == '#')
             continue;
         if (line == "}")
-            return;
+            break;
 
         if (!line.empty() && line.back() == ';')
             line.pop_back();
@@ -97,10 +97,10 @@ void ServerConfig::parseServerBlock(std::ifstream &file) {
             default:
                 handleServerDirective(type, iss);
         }
-        for (auto& [path, loc] : locations) {
-            if (loc.root.empty())
-                loc.root = this->root;
-        }
+    }
+    for (auto& [path, loc] : locations) {
+        if (loc.root.empty())
+            loc.root = this->root;
     }
 }
 
@@ -133,8 +133,8 @@ void ServerConfig::handleListen(std::string value) {
 size_t ServerConfig::handleBodySize(std::string& value) {
     try {
         char unit = value.back();
-        size_t multiplier;
-        size_t num = std::stoul(value.substr(0, value.size() - 1));
+        size_t multiplier = 1;
+        size_t num = 0;
         
         if (std::isalpha(unit)) {
             switch (std::toupper(unit)) {
@@ -142,9 +142,13 @@ size_t ServerConfig::handleBodySize(std::string& value) {
                 case 'M': multiplier = 1024 * 1024; break;
                 case 'G': multiplier = 1024 * 1024 * 1024; break;
                 default:
-                    throw std::runtime_error("Unknown size unit in client_max_body_size: " + sizeStr);
+                throw std::runtime_error("Unknown size unit in client_max_body_size: " + value);
             }
+            num = std::stoul(value.substr(0, value.size() - 1));
         }
+        else
+            num = std::stoul(value);
+
         if ((num * multiplier) > _maxAllowedBodySize || (num * multiplier) < 1)
             throw std::runtime_error("Invalid client body size. Maximum allowed size is " + std::to_string(_maxAllowedBodySize) + " bytes.");
         return num * multiplier;
