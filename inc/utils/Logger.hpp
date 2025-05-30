@@ -42,19 +42,28 @@ public:
     static void setConsoleLogging(bool enabled);
     static void setColorLogging(bool enabled);
     
+#ifdef DEBUG_LOGGING
     static void debug(const std::string& message);
-    static void info(const std::string& message);
-    static void warn(const std::string& message);
-    static void error(const std::string& message);
     
-    // Convenience methods for formatted logging
     template<typename... Args>
     static void debugf(const std::string& format, Args... args) {
         if (_currentLevel <= LogLevel::DEBUG) {
             debug(formatString(format, args...));
         }
     }
+#else
+    // No-op functions when debug is disabled
+    static void debug(const std::string& /* message */) {}
     
+    template<typename... Args>
+    static void debugf(const std::string& /* format */, Args... /* args */) {}
+#endif
+    
+    static void info(const std::string& message);
+    static void warn(const std::string& message);
+    static void error(const std::string& message);
+    
+    // Convenience methods for formatted logging
     template<typename... Args>
     static void infof(const std::string& format, Args... args) {
         if (_currentLevel <= LogLevel::INFO) {

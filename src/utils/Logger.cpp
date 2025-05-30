@@ -108,9 +108,11 @@ void Logger::writeLog(LogLevel level, const std::string& message) {
     }
 }
 
+#ifdef DEBUG_LOGGING
 void Logger::debug(const std::string& message) {
     writeLog(LogLevel::DEBUG, message);
 }
+#endif
 
 void Logger::info(const std::string& message) {
     writeLog(LogLevel::INFO, message);

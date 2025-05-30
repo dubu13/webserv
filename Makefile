@@ -41,3 +41,7 @@ re: fclean all
 DEFAULT = "\033[0m"
 GREEN = "\033[0;32m"
 RED = "\033[0;31m"
+
+ifdef DEBUG
+    CXXFLAGS += -DDEBUG_LOGGING
+endif
