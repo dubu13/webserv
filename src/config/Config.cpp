@@ -13,28 +13,37 @@ void Config::parseFromFile() {
     Logger::infof("Starting to parse config file: %s", _fileName.c_str());
     std::ifstream file(_fileName);
     if (!file.is_open()) {
+        Logger::errorf("Could not open config file: %s", _fileName.c_str());
         throw std::runtime_error("Could not open config file: " + _fileName);
     }
     
     std::string content((std::istreambuf_iterator<char>(file)),
                         std::istreambuf_iterator<char>());
     file.close();
+    Logger::debugf("Read %zu bytes from config file", content.length());
     
     std::vector<std::string> serverBlocks = ConfigUtils::extractServerBlocks(content);
     if (serverBlocks.empty()) {
+        Logger::error("No server blocks found in config file");
         throw std::runtime_error("No server blocks found in config file");
     }
     
-    for (const auto& blockContent : serverBlocks) {
+    Logger::infof("Found %zu server blocks in config", serverBlocks.size());
+    
+    for (size_t i = 0; i < serverBlocks.size(); ++i) {
+        Logger::debugf("Parsing server block %zu...", i + 1);
         ServerBlock server;
-        parseServerBlock(blockContent, server);
+        parseServerBlock(serverBlocks[i], server);
         
         // Add server with each listen directive as key
         for (const auto& listen : server.listenDirectives) {
             std::string key = listen.first + ":" + std::to_string(listen.second);
             _servers[key] = server;
+            Logger::infof("Added server configuration for %s", key.c_str());
         }
     }
+    
+    Logger::infof("Configuration parsing completed successfully. Total servers: %zu", _servers.size());
 }
 
 void Config::parseServerBlock(const std::string& content, ServerBlock& server) {

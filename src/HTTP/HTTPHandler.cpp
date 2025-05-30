@@ -26,15 +26,30 @@ HTTPHandler::HTTPHandler(const std::string &root, const ServerBlock *config)
 HTTPHandler::~HTTPHandler() {}
 
 std::string HTTPHandler::handleRequest(const std::string &requestData) {
+  Logger::debugf("HTTPHandler processing request (%zu bytes)", requestData.size());
+  
   try {
     HTTP::Request request;
     if (!HTTP::parseRequest(requestData, request)) {
-      Logger::warn("Failed to parse HTTP request");
+      Logger::warn("Failed to parse HTTP request - malformed request");
+      Logger::debugf("Raw request data: %s", requestData.substr(0, std::min(requestData.size(), size_t(200))).c_str());
       return HTTP::createErrorResponse(HTTP::StatusCode::BAD_REQUEST);
     }
+    
     std::string uri = request.requestLine.uri;
-    Logger::infof("Processing %s request for URI: %s",
-                  HTTP::methodToString(request.requestLine.method).c_str(), uri.c_str());
+    std::string methodStr = HTTP::methodToString(request.requestLine.method);
+    Logger::infof("Processing %s request for URI: %s", methodStr.c_str(), uri.c_str());
+    
+    // Log important headers
+    for (const auto& [key, value] : request.headers) {
+      if (key == "Host" || key == "Content-Length" || key == "Content-Type" || key == "Connection") {
+        Logger::debugf("Header: %s: %s", key.c_str(), value.c_str());
+      }
+    }
+    
+    if (!request.body.empty()) {
+      Logger::debugf("Request body length: %zu bytes", request.body.length());
+    }
 
     // Get location configuration for this URI
     const LocationBlock *location = nullptr;
@@ -44,6 +59,7 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
     if (_config) {
       location = _config->getLocation(uri);
       if (location && !location->root.empty()) {
+        Logger::debugf("Found location block for URI %s with root: %s", uri.c_str(), location->root.c_str());
         // Use location-specific root and strip location path from URI
         effectiveRoot = location->root;
         
@@ -61,7 +77,10 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
           if (effectiveUri.empty()) {
             effectiveUri = "/";
           }
+          Logger::debugf("Stripped location path '%s' from URI, new URI: %s", locationPath.c_str(), effectiveUri.c_str());
         }
+      } else {
+        Logger::debugf("No specific location found for URI %s, using default root", uri.c_str());
       }
     }
 
@@ -76,60 +95,75 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
       }
 
       if (location->allowedMethods.find(methodStr) == location->allowedMethods.end()) {
+        Logger::warnf("Method %s not allowed for URI %s", methodStr.c_str(), uri.c_str());
         return HTTP::createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
       }
     }
 
     std::string filePath = effectiveRoot + effectiveUri;
-    Logger::debugf("Attempting to access file: %s (root: %s, uri: %s, effectiveRoot: %s, effectiveUri: %s)", 
-                   filePath.c_str(), _root_directory.c_str(), uri.c_str(), effectiveRoot.c_str(), effectiveUri.c_str());
+    Logger::debugf("Final file path: %s (root: %s, uri: %s)", filePath.c_str(), effectiveRoot.c_str(), effectiveUri.c_str());
     
     switch (request.requestLine.method) {
     case HTTP::Method::GET:
+      Logger::debug("Processing GET request");
       if (_cgiHandler.canHandle(filePath)) {
-        Logger::debug("Handling CGI request");
+        Logger::infof("Handling CGI request for: %s", filePath.c_str());
         // Temporarily set CGI handler root for this request
         std::string originalRoot = _root_directory;
         _cgiHandler.setRootDirectory(effectiveRoot);
         std::string cgiResponse = _cgiHandler.executeCGI(effectiveUri, request);
         _cgiHandler.setRootDirectory(originalRoot);  // Restore original root
+        Logger::debugf("CGI response length: %zu bytes", cgiResponse.length());
         return !cgiResponse.empty()
                    ? cgiResponse
                    : HTTP::createErrorResponse(
                          HTTP::StatusCode::INTERNAL_SERVER_ERROR);
       } else {
-        Logger::debugf("Reading file from: %s", filePath.c_str());
+        Logger::debugf("Reading static file from: %s", filePath.c_str());
         HTTP::StatusCode status;
         std::string content = FileUtils::readFile(effectiveRoot, effectiveUri, status);
+        Logger::debugf("File read result: status=%d, content_length=%zu", static_cast<int>(status), content.length());
+        
         if (status != HTTP::StatusCode::OK) {
+          Logger::warnf("File access failed with status %d for path: %s", static_cast<int>(status), filePath.c_str());
           auto errorPageIt = _custom_error_pages.find(status);
           if (errorPageIt != _custom_error_pages.end()) {
+            Logger::debugf("Using custom error page: %s", errorPageIt->second.c_str());
             HTTP::StatusCode fileStatus;
             std::string customContent = FileUtils::readFile(
                 _root_directory, errorPageIt->second, fileStatus);
             if (fileStatus == HTTP::StatusCode::OK) {
+              Logger::debug("Custom error page loaded successfully");
               return HTTP::createFileResponse(status, customContent,
                                               "text/html");
+            } else {
+              Logger::debug("Custom error page failed to load, using default");
             }
           }
           return HTTP::createErrorResponse(status);
         }
-        return HTTP::createFileResponse(status, content,
-                                        HTTP::getMimeType(filePath));
+        
+        std::string mimeType = HTTP::getMimeType(filePath);
+        Logger::debugf("Serving file with MIME type: %s", mimeType.c_str());
+        return HTTP::createFileResponse(status, content, mimeType);
       }
       break;
     case HTTP::Method::POST:
+      Logger::debug("Processing POST request");
       if (_cgiHandler.canHandle(filePath)) {
+        Logger::infof("Handling CGI POST request for: %s", filePath.c_str());
         // Temporarily set CGI handler root for this request
         std::string originalRoot = _root_directory;
         _cgiHandler.setRootDirectory(effectiveRoot);
         std::string cgiResponse = _cgiHandler.executeCGI(effectiveUri, request);
         _cgiHandler.setRootDirectory(originalRoot);  // Restore original root
+        Logger::debugf("CGI POST response length: %zu bytes", cgiResponse.length());
         return !cgiResponse.empty()
                    ? cgiResponse
                    : HTTP::createErrorResponse(
                          HTTP::StatusCode::INTERNAL_SERVER_ERROR);
       } else {
+        Logger::debug("Processing file upload");
         // Handle file upload
         HTTP::StatusCode status;
         bool success = false;
@@ -139,18 +173,23 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
           std::string uploadDir = location->uploadStore;
           std::string filename = "upload_" + std::to_string(time(nullptr)) + ".txt";
           std::string uploadPath = "/" + filename;
+          Logger::debugf("Uploading to configured directory: %s%s", uploadDir.c_str(), uploadPath.c_str());
           success = FileUtils::writeFile(uploadDir, uploadPath, request.body, status);
         } else {
           // Fallback to default behavior
+          Logger::debugf("Uploading to default location: %s", filePath.c_str());
           success = FileUtils::writeFile(effectiveRoot, effectiveUri, request.body, status);
         }
 
+        Logger::debugf("Upload result: success=%s, status=%d", success ? "true" : "false", static_cast<int>(status));
         return HTTP::createSimpleResponse(
             status, success ? "File uploaded successfully" : "Upload failed");
       }
     case HTTP::Method::DELETE: {
+      Logger::debugf("Processing DELETE request for: %s", filePath.c_str());
       HTTP::StatusCode status;
       bool success = FileUtils::deleteFile(effectiveRoot, effectiveUri, status);
+      Logger::debugf("Delete result: success=%s, status=%d", success ? "true" : "false", static_cast<int>(status));
       return HTTP::createSimpleResponse(status, success ? "File deleted"
                                                         : "Delete failed");
     }
@@ -158,10 +197,11 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
     case HTTP::Method::PUT:
     case HTTP::Method::PATCH:
     default:
+      Logger::warnf("Method not allowed: %s", methodStr.c_str());
       return HTTP::createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
     }
   } catch (const std::exception &e) {
-    Logger::errorf("Server error: %s", e.what());
+    Logger::errorf("HTTPHandler error: %s", e.what());
     return HTTP::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
   }
 }

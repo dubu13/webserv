@@ -47,31 +47,51 @@ ssize_t ClientHandler::readClientData(int fd, std::string &incomingData, size_t 
   char buffer[8192];
   ssize_t bytesRead = recv(fd, buffer, sizeof(buffer), MSG_DONTWAIT);
   
+  Logger::debugf("recv() on fd %d returned %zd bytes", fd, bytesRead);
+  
   if (bytesRead > 0) {
     if (incomingData.length() + bytesRead > maxSize) {
+      Logger::warnf("Payload too large: current=%zu, incoming=%zd, max=%zu", 
+                    incomingData.length(), bytesRead, maxSize);
       return -2; // Payload too large
     }
     incomingData.append(buffer, bytesRead);
+    Logger::debugf("Appended %zd bytes to client data (total: %zu bytes)", bytesRead, incomingData.length());
   } else if (bytesRead == 0) {
+    Logger::debugf("Connection closed by client (fd: %d)", fd);
     return 0; // Connection closed
   } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
+    Logger::debugf("recv() error on fd %d: %s (errno: %d)", fd, strerror(errno), errno);
     return -1; // Error
+  } else {
+    Logger::debugf("recv() would block on fd %d", fd);
   }
   
   return bytesRead;
 }
 
 ssize_t ClientHandler::writeClientData(int fd, std::string &outgoingData) {
-  if (outgoingData.empty()) return 0;
+  if (outgoingData.empty()) {
+    Logger::debugf("No outgoing data to write for fd: %d", fd);
+    return 0;
+  }
   
-  ssize_t bytesSent = send(fd, outgoingData.c_str(), outgoingData.length(), MSG_DONTWAIT);
+  size_t bytesToSend = outgoingData.length();
+  ssize_t bytesSent = send(fd, outgoingData.c_str(), bytesToSend, MSG_DONTWAIT);
+  
+  Logger::debugf("send() on fd %d: attempted=%zu, sent=%zd", fd, bytesToSend, bytesSent);
   
   if (bytesSent > 0) {
     outgoingData.erase(0, bytesSent);
+    Logger::debugf("Sent %zd bytes, %zu bytes remaining in buffer", bytesSent, outgoingData.length());
   } else if (bytesSent == 0) {
+    Logger::debugf("Connection closed during write (fd: %d)", fd);
     return 0; // Connection closed
   } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
+    Logger::debugf("send() error on fd %d: %s (errno: %d)", fd, strerror(errno), errno);
     return -1; // Error
+  } else {
+    Logger::debugf("send() would block on fd %d", fd);
   }
   
   return bytesSent;
@@ -103,59 +123,78 @@ size_t ClientHandler::getClientCount() const {
 }
 
 void ClientHandler::handleRead(int fd) {
+  Logger::debugf("Handling read for fd: %d", fd);
   auto it = _clients.find(fd);
-  if (it == _clients.end()) return;
+  if (it == _clients.end()) {
+    Logger::warnf("Read event for unknown client fd: %d", fd);
+    return;
+  }
   
   ClientData &client = it->second;
   size_t maxBodySize = _server.getConfig().clientMaxBodySize;
   
+  Logger::debugf("Reading from client fd: %d (max body size: %zu)", fd, maxBodySize);
   ssize_t bytes = readClientData(fd, client.incomingData, maxBodySize);
   
   if (bytes < 0) {
     if (bytes == -2) {
+      Logger::warnf("Payload too large for client fd: %d", fd);
       std::string errorResponse = HTTP::createErrorResponse(HTTP::StatusCode::PAYLOAD_TOO_LARGE);
       client.outgoingData = errorResponse;
       _server.getPoller().setFdEvents(fd, POLLOUT);
       return;
     } else if (bytes == -1) {
+      Logger::errorf("Read error for client fd: %d", fd);
       std::string errorResponse = HTTP::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
       client.outgoingData = errorResponse;
       _server.getPoller().setFdEvents(fd, POLLOUT);
       return;
     }
   } else if (bytes == 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+    Logger::infof("Client disconnected during read (fd: %d)", fd);
     removeClient(fd);
     return;
   }
   
   if (bytes > 0) {
     client.updateActivity();
+    Logger::debugf("Updated activity timestamp for client fd: %d", fd);
   }
   
   if (hasCompleteRequest(client.incomingData)) {
+    Logger::debugf("Complete HTTP request received from fd: %d", fd);
     processRequest(fd, client);
   } else if (client.hasDataToWrite()) {
+    Logger::debugf("Setting fd %d for both read and write events", fd);
     _server.getPoller().setFdEvents(fd, POLLIN | POLLOUT);
   }
 }
 void ClientHandler::handleWrite(int fd) {
+  Logger::debugf("Handling write for fd: %d", fd);
   auto it = _clients.find(fd);
-  if (it == _clients.end()) return;
+  if (it == _clients.end()) {
+    Logger::warnf("Write event for unknown client fd: %d", fd);
+    return;
+  }
   
   ClientData &client = it->second;
   
   if (!client.hasDataToWrite()) {
+    Logger::debugf("No data to write for fd: %d, switching to read-only mode", fd);
     _server.getPoller().setFdEvents(fd, POLLIN);
     if (!client.keepAlive) {
+      Logger::debugf("Connection not keep-alive, removing client fd: %d", fd);
       removeClient(fd);
     }
     return;
   }
   
+  Logger::debugf("Writing %zu bytes to client fd: %d", client.outgoingData.length(), fd);
   ssize_t bytes = writeClientData(fd, client.outgoingData);
   
   if (bytes <= 0) {
     if (bytes == 0 || (errno != EAGAIN && errno != EWOULDBLOCK)) {
+      Logger::infof("Write failed or connection closed for fd: %d", fd);
       removeClient(fd);
     }
     return;
@@ -163,24 +202,38 @@ void ClientHandler::handleWrite(int fd) {
   
   if (bytes > 0) {
     client.updateActivity();
+    Logger::debugf("Updated activity timestamp for client fd: %d after write", fd);
   }
   
   if (!client.hasDataToWrite()) {
+    Logger::debugf("All data written for fd: %d, switching to read-only mode", fd);
     _server.getPoller().setFdEvents(fd, POLLIN);
     if (!client.keepAlive) {
+      Logger::debugf("Connection not keep-alive, removing client fd: %d", fd);
       removeClient(fd);
     }
   }
 }
 
 void ClientHandler::processRequest(int fd, ClientData &client) {
+  Logger::debugf("Processing HTTP request for fd: %d", fd);
+  Logger::debugf("Request data length: %zu bytes", client.incomingData.length());
+  
+  // Log first line of request for debugging
+  size_t firstLineEnd = client.incomingData.find("\r\n");
+  if (firstLineEnd != std::string::npos) {
+    std::string requestLine = client.incomingData.substr(0, firstLineEnd);
+    Logger::infof("Request line: %s", requestLine.c_str());
+  }
+  
   try {
     std::string response = _httpHandler.handleRequest(client.incomingData);
     client.outgoingData = response;
     client.incomingData.clear();
+    Logger::debugf("Generated response (%zu bytes) for fd: %d", response.length(), fd);
     _server.getPoller().setFdEvents(fd, POLLOUT);
   } catch (const std::exception &e) {
-    Logger::errorf("Request processing error: %s", e.what());
+    Logger::errorf("Request processing error for fd %d: %s", fd, e.what());
     sendError(fd, 500);
   }
 }
@@ -199,8 +252,11 @@ void ClientHandler::sendError(int fd, int status) {
 }
 
 void ClientHandler::checkTimeouts() {
+  Logger::debugf("ClientHandler::checkTimeouts - Checking timeouts for %zu clients", _clients.size());
+  
   std::vector<int> timedOut;
   time_t currentTime = time(NULL);
+  size_t activeConnections = 0;
   
   for (const auto &pair : _clients) {
     const ClientData &client = pair.second;
@@ -209,15 +265,25 @@ void ClientHandler::checkTimeouts() {
     
     if (client.hasDataToWrite()) {
       timeoutLimit = _timeout / 2;
+      activeConnections++;
+      Logger::debugf("Client fd %d has pending data, using reduced timeout: %ld seconds", pair.first, timeoutLimit);
     }
     
     if (idleTime > timeoutLimit) {
+      Logger::warnf("Client fd %d timed out (idle: %ld seconds, limit: %ld seconds)", 
+                    pair.first, idleTime, timeoutLimit);
       timedOut.push_back(pair.first);
+    } else {
+      Logger::debugf("Client fd %d is active (idle: %ld seconds < limit: %ld seconds)", 
+                     pair.first, idleTime, timeoutLimit);
     }
   }
   
+  Logger::debugf("Timeout check complete: %zu clients checked, %zu active with pending data, %zu timed out", 
+                 _clients.size(), activeConnections, timedOut.size());
+  
   for (int fd : timedOut) {
-    Logger::infof("Client timeout (fd: %d)", fd);
+    Logger::infof("Removing timed out client (fd: %d)", fd);
     removeClient(fd);
   }
 }

@@ -1,4 +1,5 @@
 #include "HTTP/HTTPTypes.hpp"
+#include "utils/Logger.hpp"
 #include <stdexcept>
 #include <unordered_map>
 #include <string_view>
@@ -20,10 +21,13 @@ static const std::unordered_map<Method, std::string_view> methodToStringMap = {
     {Method::PATCH, "PATCH"}
 };
 Method stringToMethod(const std::string &method) {
+  Logger::debugf("HTTPTypes::stringToMethod - Converting method string: %s", method.c_str());
   auto it = stringToMethodMap.find(method);
   if (it != stringToMethodMap.end()) {
+    Logger::debugf("Method '%s' mapped successfully", method.c_str());
     return it->second;
   }
+  Logger::errorf("Invalid HTTP method: %s", method.c_str());
   throw std::runtime_error("Invalid HTTP method: " + method);
 }
 std::string methodToString(Method method) {
@@ -87,19 +91,26 @@ static const std::unordered_map<std::string_view, std::string_view> extensionToM
 };
 
 std::string getMimeType(const std::string &path) {
+  Logger::debugf("HTTPTypes::getMimeType - Determining MIME type for path: %s", path.c_str());
+  
   size_t dotPos = path.find_last_of('.');
   if (dotPos == std::string::npos || dotPos == path.length() - 1) {
+    Logger::debug("No file extension found, using default MIME type");
     return "application/octet-stream";
   }
   
   std::string ext = path.substr(dotPos + 1);
+  Logger::debugf("File extension: %s", ext.c_str());
+  
   // Convert to lowercase efficiently
   for (char &c : ext) {
     if (c >= 'A' && c <= 'Z') c += 32;
   }
   
   auto it = extensionToMimeMap.find(ext);
-  return (it != extensionToMimeMap.end()) ? std::string(it->second) : "application/octet-stream";
+  std::string mimeType = (it != extensionToMimeMap.end()) ? std::string(it->second) : "application/octet-stream";
+  Logger::debugf("MIME type resolved: %s", mimeType.c_str());
+  return mimeType;
 }
 
 }

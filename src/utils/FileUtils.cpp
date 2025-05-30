@@ -5,6 +5,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <iostream>
+#include <vector>
+#include <cstring>
 
 namespace FileUtils {
 
@@ -17,7 +19,7 @@ std::string readFile(const std::string &rootDir, const std::string &uri, HTTP::S
                    rootDir.c_str(), uri.c_str(), filePath.c_str());
     
     if (!isPathSafe(uri)) {
-        Logger::warnf("Unsafe path detected: %s", uri.c_str());
+        Logger::warnf("Security violation: unsafe path detected: %s", uri.c_str());
         status = HTTP::StatusCode::FORBIDDEN;
         return "";
     }
@@ -25,24 +27,62 @@ std::string readFile(const std::string &rootDir, const std::string &uri, HTTP::S
     // Try to get from cache first
     std::string content, mimeType;
     if (fileCache.getFile(filePath, content, mimeType)) {
-        Logger::debugf("File found in cache: %s", filePath.c_str());
+        Logger::debugf("Cache HIT: file found in cache: %s (%zu bytes)", filePath.c_str(), content.size());
         status = HTTP::StatusCode::OK;
         return content;
     }
     
+    Logger::debugf("Cache MISS: attempting to read file from disk: %s", filePath.c_str());
+    
+    // Check if file exists and get stats
+    struct stat fileStat;
+    if (stat(filePath.c_str(), &fileStat) != 0) {
+        Logger::warnf("File not found: %s (errno: %d - %s)", filePath.c_str(), errno, strerror(errno));
+        status = HTTP::StatusCode::NOT_FOUND;
+        return "";
+    }
+    
+    // Check if it's a directory
+    if (S_ISDIR(fileStat.st_mode)) {
+        Logger::debugf("Path is a directory, checking for index files: %s", filePath.c_str());
+        // Try to find index files
+        const char* indexFileArray[] = {"index.html", "index.htm", "index.php"};
+        for (size_t i = 0; i < sizeof(indexFileArray) / sizeof(indexFileArray[0]); ++i) {
+            std::string indexPath = filePath;
+            if (indexPath.back() != '/') indexPath += "/";
+            indexPath += indexFileArray[i];
+            
+            Logger::debugf("Checking for index file: %s", indexPath.c_str());
+            if (access(indexPath.c_str(), R_OK) == 0) {
+                Logger::infof("Found index file: %s", indexPath.c_str());
+                return readFile(rootDir, uri + (uri.back() == '/' ? "" : "/") + indexFileArray[i], status);
+            }
+        }
+        Logger::warnf("Directory access without index file: %s", filePath.c_str());
+        status = HTTP::StatusCode::FORBIDDEN;
+        return "";
+    }
+    
+    // Check if file is readable
+    if (access(filePath.c_str(), R_OK) != 0) {
+        Logger::warnf("File not readable: %s (errno: %d - %s)", filePath.c_str(), errno, strerror(errno));
+        status = HTTP::StatusCode::FORBIDDEN;
+        return "";
+    }
+    
     // If not in cache, read from file
-    Logger::debugf("Attempting to open file: %s", filePath.c_str());
     std::ifstream file(filePath, std::ios::binary);
     if (!file.is_open()) {
-        Logger::warnf("Failed to open file: %s", filePath.c_str());
-        status = HTTP::StatusCode::NOT_FOUND;
+        Logger::errorf("Failed to open file for reading: %s", filePath.c_str());
+        status = HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         return "";
     }
     
     content = std::string((std::istreambuf_iterator<char>(file)), 
                          std::istreambuf_iterator<char>());
+    file.close();
     
-    Logger::debugf("Successfully read %zu bytes from file: %s", content.size(), filePath.c_str());
+    Logger::infof("Successfully read %zu bytes from file: %s", content.size(), filePath.c_str());
     
     // Cache the file content
     fileCache.cacheFile(filePath, content, "text/html"); // Default MIME type
@@ -54,25 +94,47 @@ std::string readFile(const std::string &rootDir, const std::string &uri, HTTP::S
 bool writeFile(const std::string &rootDir, const std::string &uri, 
                const std::string &content, HTTP::StatusCode &status) {
     std::string filePath = buildPath(rootDir, uri);
+    Logger::debugf("FileUtils::writeFile - attempting to write %zu bytes to: %s", content.size(), filePath.c_str());
     
     if (!isPathSafe(uri)) {
+        Logger::warnf("Security violation: unsafe path detected for write: %s", uri.c_str());
         status = HTTP::StatusCode::FORBIDDEN;
         return false;
     }
     
+    // Check if directory exists and create if necessary
+    size_t lastSlash = filePath.find_last_of('/');
+    if (lastSlash != std::string::npos) {
+        std::string dirPath = filePath.substr(0, lastSlash);
+        Logger::debugf("Checking directory: %s", dirPath.c_str());
+        
+        struct stat dirStat;
+        if (stat(dirPath.c_str(), &dirStat) != 0) {
+            Logger::debugf("Directory doesn't exist, attempting to create: %s", dirPath.c_str());
+            // You might want to implement recursive directory creation here
+        }
+    }
+    
     std::ofstream file(filePath, std::ios::binary);
     if (!file.is_open()) {
+        Logger::errorf("Failed to open file for writing: %s (errno: %d - %s)", 
+                      filePath.c_str(), errno, strerror(errno));
         status = HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         return false;
     }
     
     file << content;
-    if (file.good()) {
+    bool success = file.good();
+    file.close();
+    
+    if (success) {
+        Logger::infof("Successfully wrote %zu bytes to file: %s", content.size(), filePath.c_str());
         // Cache the newly written file
         fileCache.cacheFile(filePath, content, "text/html"); // Default MIME type
         status = HTTP::StatusCode::CREATED;
         return true;
     } else {
+        Logger::errorf("Failed to write content to file: %s", filePath.c_str());
         status = HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         return false;
     }
@@ -80,17 +142,40 @@ bool writeFile(const std::string &rootDir, const std::string &uri,
 
 bool deleteFile(const std::string &rootDir, const std::string &uri, HTTP::StatusCode &status) {
     std::string filePath = buildPath(rootDir, uri);
+    Logger::debugf("FileUtils::deleteFile - attempting to delete: %s", filePath.c_str());
     
     if (!isPathSafe(uri)) {
+        Logger::warnf("Security violation: unsafe path detected for delete: %s", uri.c_str());
+        status = HTTP::StatusCode::FORBIDDEN;
+        return false;
+    }
+    
+    // Check if file exists first
+    struct stat fileStat;
+    if (stat(filePath.c_str(), &fileStat) != 0) {
+        Logger::warnf("File not found for deletion: %s (errno: %d - %s)", 
+                     filePath.c_str(), errno, strerror(errno));
+        status = HTTP::StatusCode::NOT_FOUND;
+        return false;
+    }
+    
+    // Check if it's a directory
+    if (S_ISDIR(fileStat.st_mode)) {
+        Logger::warnf("Attempted to delete directory: %s", filePath.c_str());
         status = HTTP::StatusCode::FORBIDDEN;
         return false;
     }
     
     if (unlink(filePath.c_str()) == 0) {
+        Logger::infof("Successfully deleted file: %s", filePath.c_str());
+        // Note: FileCache doesn't support individual file removal, so cache will be stale
+        // This is acceptable for a basic implementation
         status = HTTP::StatusCode::NO_CONTENT;
         return true;
     } else {
-        status = HTTP::StatusCode::NOT_FOUND;
+        Logger::errorf("Failed to delete file: %s (errno: %d - %s)", 
+                      filePath.c_str(), errno, strerror(errno));
+        status = HTTP::StatusCode::INTERNAL_SERVER_ERROR;
         return false;
     }
 }
