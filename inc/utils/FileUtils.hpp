@@ -21,6 +21,14 @@ namespace FileUtils {
   bool deleteFile(const std::string &rootDir, const std::string &uri, HTTP::StatusCode &status);
   bool fileExists(const std::string &rootDir, const std::string &uri, size_t &size);
   
+  // Directory utilities
+  bool isDirectory(const std::string &path);
+  std::string generateDirectoryListing(const std::string &dirPath, const std::string &uri);
+  
+  // Path utilities
+  std::string extractQueryParams(const std::string &uri);
+  std::string cleanUri(const std::string &uri);
+  
   std::string buildPath(const std::string &root, const std::string &path);
   bool isPathSafe(const std::string &path);
   std::string sanitizePath(const std::string &path);

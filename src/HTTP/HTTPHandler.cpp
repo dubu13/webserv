@@ -61,6 +61,16 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
     const LocationBlock *location = nullptr;
     if (_config) {
       location = _config->getLocation(uri);
+      Logger::debugf("Location lookup for URI '%s': %s", uri.c_str(), 
+                     location ? "found" : "not found");
+      if (location) {
+        Logger::debugf("Location details - path: '%s', autoindex: %s, index: '%s'",
+                       location->path.c_str(), 
+                       location->autoindex ? "enabled" : "disabled",
+                       location->index.c_str());
+      }
+    } else {
+      Logger::warn("No server configuration available for location lookup");
     }
     
     // Resolve effective paths
@@ -68,7 +78,7 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
     Logger::debugf("Resolved paths - root: %s, uri: %s", effectiveRoot.c_str(), effectiveUri.c_str());
 
     // Validate method for location
-    if (!HTTP::validateMethodForLocation(request, location)) {
+    if (!HTTP::RequestValidator::isMethodAllowed(request, location)) {
       return HttpResponseBuilder::createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
     }
 
