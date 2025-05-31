@@ -78,24 +78,9 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
       return handleCgiRequest(request, effectiveRoot, effectiveUri);
     }
 
-    // Dispatch to method-specific handlers
-    switch (request.requestLine.method) {
-      case HTTP::Method::GET:
-        return HTTP::handleGetRequest(request, effectiveRoot, effectiveUri, location);
-      
-      case HTTP::Method::POST:
-        return HTTP::handlePostRequest(request, effectiveRoot, effectiveUri, location);
-      
-      case HTTP::Method::DELETE:
-        return HTTP::handleDeleteRequest(request, effectiveRoot, effectiveUri, location);
-      
-      case HTTP::Method::HEAD:
-      case HTTP::Method::PUT:
-
-      default:
-        Logger::warnf("Method not allowed: %s", methodStr.c_str());
-        return HttpResponseBuilder::createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
-    }
+    // Dispatch to method-specific handlers using hash lookup
+    return HTTP::dispatchMethodHandler(request, effectiveRoot, effectiveUri, location);
+    
   } catch (const std::exception &e) {
     Logger::errorf("HTTPHandler error: %s", e.what());
     return HttpResponseBuilder::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);

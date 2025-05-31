@@ -56,8 +56,8 @@ bool parseRequest(const std::string &data, Request &request) {
   }
 }
 
-HTTP::RequestLine parseRequestLine(const std::string &line) {
-  HTTP::RequestLine requestLine;
+RequestLine parseRequestLine(const std::string &line) {
+  RequestLine requestLine;
   
   std::string_view lineView(line);
   auto [method, rest] = splitFirst(lineView, ' ');

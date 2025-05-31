@@ -57,17 +57,6 @@ std::string statusToString(StatusCode status) {
   }
   return "Unknown";
 }
-static const std::unordered_map<Version, std::string_view> versionToStringMap = {
-    {Version::HTTP_1_0, "HTTP/1.0"},
-    {Version::HTTP_1_1, "HTTP/1.1"}
-};
-std::string versionToString(Version version) {
-  auto it = versionToStringMap.find(version);
-  if (it != versionToStringMap.end()) {
-    return std::string(it->second);
-  }
-  return "HTTP/1.1";
-}
 
 // MIME type lookup - consolidated into HTTPTypes for efficiency
 static const std::unordered_map<std::string_view, std::string_view> extensionToMimeMap = {

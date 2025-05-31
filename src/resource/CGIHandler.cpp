@@ -69,9 +69,6 @@ std::string CGIHandler::executeScript(const std::string &script_path,
   // TODO: Implement actual CGI execution using fork/execve as per subject requirements
   // The subject specifically mentions fork can only be used for CGI
   
-  (void)script_path;
-  (void)handler_path;
-  (void)request;
   return HttpResponseBuilder::createSimpleResponse(HTTP::StatusCode::OK,
                                     "CGI execution not implemented yet");
 }

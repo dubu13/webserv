@@ -9,9 +9,16 @@
 namespace HttpParser {
     // Pure HTTP parsing utilities - no state, no dependencies
     
+    // HTTP Request Line structure
+    struct RequestLine {
+      HTTP::Method method;
+      std::string uri;
+      std::string version;
+    };
+    
     // HTTP Request structure
     struct Request {
-      HTTP::RequestLine requestLine;
+      RequestLine requestLine;
       std::map<std::string, std::string> headers;
       std::string body;
       bool keepAlive = false;
@@ -20,7 +27,7 @@ namespace HttpParser {
     
     // High-level parsing functions
     bool parseRequest(const std::string &data, Request &request);
-    HTTP::RequestLine parseRequestLine(const std::string &line);
+    RequestLine parseRequestLine(const std::string &line);
     
     // String parsing utilities (high performance with string_view)
     std::string_view trimWhitespace(std::string_view str);

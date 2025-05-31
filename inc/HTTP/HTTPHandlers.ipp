@@ -7,6 +7,7 @@
 #include "utils/Logger.hpp"
 #include <map>
 #include <string>
+#include <functional>
 #include <ctime>
 
 // HTTP Request/Response handler implementations
@@ -14,11 +15,17 @@
 
 namespace HTTP {
 
+// Forward declarations - Remove this since we need the full definition
+// struct Request;
+
+// Handler function type for different HTTP methods
+using MethodHandler = std::function<std::string(const HttpParser::Request&, const std::string&, const std::string&, const LocationBlock*)>;
+
 // HTTP Method Handler implementations
-inline std::string handleGetRequest(const HttpParser::Request& request, const std::string& effectiveRoot, 
-                                   const std::string& effectiveUri, const LocationBlock* location) {
-    (void)request;  // Unused parameter
-    (void)location; // Unused parameter
+inline std::string handleGetRequest([[maybe_unused]] const HttpParser::Request& request, 
+                                   const std::string& effectiveRoot, 
+                                   const std::string& effectiveUri, 
+                                   [[maybe_unused]] const LocationBlock* location) {
     Logger::debug("Processing GET request");
     
     std::string filePath = effectiveRoot + effectiveUri;
@@ -65,10 +72,8 @@ inline std::string handlePostRequest(const HttpParser::Request& request, const s
         status, success ? "File uploaded successfully" : "Upload failed");
 }
 
-inline std::string handleDeleteRequest(const HttpParser::Request& request, const std::string& effectiveRoot, 
-                                      const std::string& effectiveUri, const LocationBlock* location) {
-    (void)request;  // Unused parameter
-    (void)location; // Unused parameter
+inline std::string handleDeleteRequest([[maybe_unused]] const HttpParser::Request& request, const std::string& effectiveRoot, 
+                                      const std::string& effectiveUri, [[maybe_unused]] const LocationBlock* location) {
     Logger::debugf("Processing DELETE request for: %s", effectiveUri.c_str());
     
     HTTP::StatusCode status;
@@ -84,14 +89,7 @@ inline bool validateMethodForLocation(const HttpParser::Request& request, const 
         return true; // No restrictions
     }
     
-    std::string methodStr;
-    switch (request.requestLine.method) {
-        case HTTP::Method::GET: methodStr = "GET"; break;
-        case HTTP::Method::POST: methodStr = "POST"; break;
-        case HTTP::Method::DELETE: methodStr = "DELETE"; break;
-        default: methodStr = "UNKNOWN"; break;
-    }
-
+    std::string methodStr = HTTP::methodToString(request.requestLine.method);
     bool allowed = location->allowedMethods.find(methodStr) != location->allowedMethods.end();
     if (!allowed) {
         Logger::warnf("Method %s not allowed for URI %s", methodStr.c_str(), request.requestLine.uri.c_str());
@@ -135,6 +133,33 @@ inline std::string handleErrorWithCustomPage(HTTP::StatusCode status,
         }
     }
     return HttpResponseBuilder::createErrorResponse(status);
+}
+
+// Method dispatcher using hash map for O(1) lookup
+inline const std::map<HTTP::Method, MethodHandler>& getMethodHandlers() {
+    static const std::map<HTTP::Method, MethodHandler> handlers = {
+        {HTTP::Method::GET, handleGetRequest},
+        {HTTP::Method::POST, handlePostRequest},
+        {HTTP::Method::DELETE, handleDeleteRequest}
+        // Add more methods as needed: HEAD, PUT, PATCH, etc.
+    };
+    return handlers;
+}
+
+inline std::string dispatchMethodHandler(const HttpParser::Request& request, 
+                                        const std::string& effectiveRoot,
+                                        const std::string& effectiveUri, 
+                                        const LocationBlock* location) {
+    const auto& handlers = getMethodHandlers();
+    auto it = handlers.find(request.requestLine.method);
+    
+    if (it != handlers.end()) {
+        Logger::debugf("Dispatching to handler for method: %s", HTTP::methodToString(request.requestLine.method).c_str());
+        return it->second(request, effectiveRoot, effectiveUri, location);
+    } else {
+        Logger::warnf("Method not implemented: %s", HTTP::methodToString(request.requestLine.method).c_str());
+        return HttpResponseBuilder::createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
+    }
 }
 
 } // namespace HTTP
