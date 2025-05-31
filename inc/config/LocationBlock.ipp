@@ -11,13 +11,14 @@ struct LocationBlock {
     std::string redirection;
     std::string cgiExtension;
     std::string cgiPath;
+    size_t clientMaxBodySize;
     
     LocationBlock();
     bool matchesPath(const std::string& requestPath) const;
 };
 
 inline LocationBlock::LocationBlock() 
-    : autoindex(false), uploadEnable(false) {
+    : autoindex(false), uploadEnable(false), clientMaxBodySize(0) {
     allowedMethods.insert("GET");
 }
 

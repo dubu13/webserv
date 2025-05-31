@@ -57,4 +57,5 @@ private:
     void handleReturn(const std::string& value, LocationBlock& location);
     void handleCgiExt(const std::string& value, LocationBlock& location);
     void handleCgiPath(const std::string& value, LocationBlock& location);
+    void handleLocationClientMaxBodySize(const std::string& value, LocationBlock& location);
 };

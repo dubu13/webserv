@@ -28,7 +28,8 @@ inline void Config::initializeLocationHandlers() {
         {"upload_enable", &Config::handleUploadEnable},
         {"return", &Config::handleReturn},
         {"cgi_ext", &Config::handleCgiExt},
-        {"cgi_path", &Config::handleCgiPath}
+        {"cgi_path", &Config::handleCgiPath},
+        {"client_max_body_size", &Config::handleLocationClientMaxBodySize}
     };
 }
 
@@ -118,4 +119,8 @@ inline void Config::handleCgiExt(const std::string& value, LocationBlock& locati
 
 inline void Config::handleCgiPath(const std::string& value, LocationBlock& location) {
     location.cgiPath = value;
+}
+
+inline void Config::handleLocationClientMaxBodySize(const std::string& value, LocationBlock& location) {
+    location.clientMaxBodySize = ConfigUtils::parseSize(value);
 }

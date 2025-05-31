@@ -37,7 +37,7 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
     if (!HttpParser::parseRequest(requestData, request)) {
       Logger::warn("Failed to parse HTTP request - malformed request");
       Logger::debugf("Raw request data: %s", requestData.substr(0, std::min(requestData.size(), size_t(200))).c_str());
-      return HttpResponseBuilder::createErrorResponse(HTTP::StatusCode::BAD_REQUEST);
+      return createErrorResponse(HTTP::StatusCode::BAD_REQUEST);
     }
     
     std::string uri = request.requestLine.uri;
@@ -77,9 +77,24 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
     auto [effectiveRoot, effectiveUri] = HTTP::resolveEffectivePath(uri, _root_directory, location);
     Logger::debugf("Resolved paths - root: %s, uri: %s", effectiveRoot.c_str(), effectiveUri.c_str());
 
+    // Validate client body size limits
+    size_t maxBodySize = _config ? _config->clientMaxBodySize : 1024 * 1024; // Default 1MB
+    if (location && location->clientMaxBodySize > 0) {
+      maxBodySize = location->clientMaxBodySize;
+      Logger::debugf("Using location-specific body size limit: %zu bytes", maxBodySize);
+    } else {
+      Logger::debugf("Using server-level body size limit: %zu bytes", maxBodySize);
+    }
+    
+    if (request.body.size() > maxBodySize) {
+      Logger::warnf("Request body too large: %zu bytes (limit: %zu bytes)", 
+                    request.body.size(), maxBodySize);
+      return createErrorResponse(HTTP::StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
     // Validate method for location
     if (!HTTP::RequestValidator::isMethodAllowed(request, location)) {
-      return HttpResponseBuilder::createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
+      return createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
     }
 
     // Handle CGI requests first (if applicable)
@@ -93,7 +108,7 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
     
   } catch (const std::exception &e) {
     Logger::errorf("HTTPHandler error: %s", e.what());
-    return HttpResponseBuilder::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
+    return createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
   }
 }
 
@@ -109,11 +124,35 @@ std::string HTTPHandler::handleCgiRequest(const HttpParser::Request& request, co
     Logger::debugf("CGI response length: %zu bytes", cgiResponse.length());
     return !cgiResponse.empty()
                ? cgiResponse
-               : HttpResponseBuilder::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
+               : createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
   }
 
 void HTTPHandler::setRootDirectory(const std::string &root) {
   Logger::infof("HTTPHandler root directory changed: %s -> %s", _root_directory.c_str(), root.c_str());
   _root_directory = root;
   _cgiHandler.setRootDirectory(root);
+}
+
+std::string HTTPHandler::createErrorResponse(HTTP::StatusCode status, const std::string& message) {
+  Logger::debugf("HTTPHandler::createErrorResponse - Creating error response with status %d", 
+                 static_cast<int>(status));
+  
+  // Try to use custom error page if available
+  auto errorPageIt = _custom_error_pages.find(status);
+  if (errorPageIt != _custom_error_pages.end()) {
+    Logger::debugf("Using custom error page: %s", errorPageIt->second.c_str());
+    
+    HTTP::StatusCode fileStatus;
+    std::string customContent = FileUtils::readFile(_root_directory, errorPageIt->second, fileStatus);
+    
+    if (fileStatus == HTTP::StatusCode::OK) {
+      Logger::debug("Custom error page loaded successfully");
+      return HttpResponseBuilder::createFileResponse(status, customContent, "text/html");
+    } else {
+      Logger::warnf("Custom error page failed to load from %s, using default", errorPageIt->second.c_str());
+    }
+  }
+  
+  // Fallback to default error response
+  return HttpResponseBuilder::createErrorResponse(status, message);
 }

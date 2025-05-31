@@ -15,6 +15,7 @@ private:
   
   // Helper methods
   std::string handleCgiRequest(const HttpParser::Request& request, const std::string& effectiveRoot, const std::string& effectiveUri);
+  std::string createErrorResponse(HTTP::StatusCode status, const std::string& message = "");
   
 public:
   HTTPHandler(const std::string &root = "./www",
