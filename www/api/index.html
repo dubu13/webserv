@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Methods Test</title>
+    <link rel="stylesheet" href="/assets/css/styles.css">
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Function to make API requests
+            async function makeRequest(method, endpoint) {
+                const resultElement = document.getElementById('result');
+                
+                try {
+                    const response = await fetch(endpoint, { method: method });
+                    const text = await response.text();
+                    resultElement.innerHTML = `<div class="success">
+                        <p><strong>${method} request successful</strong></p>
+                        <p>Status: ${response.status} ${response.statusText}</p>
+                        <p>Response: ${text}</p>
+                    </div>`;
+                } catch (error) {
+                    resultElement.innerHTML = `<div class="error">
+                        <p>Error: ${error.message}</p>
+                    </div>`;
+                }
+            }
+            
+            // Add event listeners to buttons
+            document.getElementById('get-btn').addEventListener('click', () => {
+                makeRequest('GET', '/api/test');
+            });
+            
+            document.getElementById('post-btn').addEventListener('click', () => {
+                makeRequest('POST', '/api/test');
+            });
+            
+            document.getElementById('delete-btn').addEventListener('click', () => {
+                makeRequest('DELETE', '/api/test');
+            });
+            
+            // Test an unsupported method
+            document.getElementById('put-btn').addEventListener('click', () => {
+                makeRequest('PUT', '/api/test');
+            });
+        });
+    </script>
+    <style>
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 4px; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; border-radius: 4px; }
+        button { margin-right: 10px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>API Methods Test</h1>
+        <div class="card">
+            <h2>Test Different HTTP Methods</h2>
+            <p>This page tests the server's ability to handle different HTTP methods.</p>
+            <p>The /api location is configured to allow GET, POST, and DELETE methods.</p>
+            
+            <div class="form-group">
+                <button id="get-btn">Test GET</button>
+                <button id="post-btn">Test POST</button>
+                <button id="delete-btn">Test DELETE</button>
+                <button id="put-btn">Test PUT (should fail)</button>
+            </div>
+            
+            <div id="result">
+                <p>Results will appear here...</p>
+            </div>
+        </div>
+        <p><a href="/">Back to Home</a></p>
+    </div>
+</body>
+</html>

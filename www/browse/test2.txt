@@ -1,0 +1,2 @@
+This is another test file.
+Directory listing should show both test1.txt and test2.txt.

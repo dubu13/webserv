@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alternative Server</title>
+    <link rel="icon" type="image/x-icon" href="/assets/images/favicon.ico">
+    <link rel="icon" type="image/svg+xml" href="/assets/images/favicon.svg">
+    <link rel="stylesheet" href="/assets/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Alternative Server</h1>
+        <div class="card">
+            <h2>Secondary Server Test</h2>
+            <p>This page is served from the secondary server on port 8081.</p>
+            <p>This demonstrates the ability to run multiple server blocks on different ports.</p>
+        </div>
+        <div class="card">
+            <h2>Limited Upload Test</h2>
+            <p>This server has a location with a very small body size limit (1KB).</p>
+            <form action="/limited" method="post" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="file">Select a file (should be less than 1KB):</label>
+                    <input type="file" name="file" id="file" required>
+                </div>
+                <div class="form-group">
+                    <button type="submit">Upload File</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

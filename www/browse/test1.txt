@@ -1,0 +1,2 @@
+This is a test file for directory listing.
+It's just a simple text file to demonstrate that files are listed correctly.
