@@ -1,14 +1,17 @@
-#include "Server.hpp"
+#include "server/MultiServerManager.hpp"
 #include "config/Config.hpp"
 #include "utils/Logger.hpp"
 #include <csignal>
 #include <iostream>
+#include <atomic>
+#include <thread>
+#include <chrono>
 
-bool g_running = true;
+std::atomic<bool> g_running{true};
 
 void signalHandler(int signum) {
     Logger::infof("Received signal %d, shutting down gracefully", signum);
-    g_running = false;
+    g_running.store(false);
 }
 
 int main(int argc, char *argv[]) {
@@ -28,19 +31,29 @@ int main(int argc, char *argv[]) {
         const auto& servers = config.getServers();
         Logger::infof("Loaded %zu server configurations", servers.size());
         
-        // Use first server configuration
+        // Stage 1.2: Multiple Server Support - Use MultiServerManager
         if (!servers.empty()) {
-            const auto& [key, serverBlock] = *servers.begin();
-            Logger::infof("Using server configuration - Host: %s, Root: %s", 
-                         serverBlock.host.c_str(), serverBlock.root.c_str());
-            // Debug: print all locations
-            Logger::infof("Server has %zu locations:", serverBlock.locations.size());
-            for (const auto& [path, location] : serverBlock.locations) {
-                Logger::infof("  Location %s: root=%s", path.c_str(), location.root.c_str());
+            MultiServerManager serverManager;
+            
+            // Initialize all server instances from configuration
+            serverManager.initializeServers(config);
+            Logger::infof("Initialized %zu server instances", serverManager.getServerCount());
+            
+            // Start all servers concurrently
+            serverManager.startAll();
+            Logger::info("All servers started, running until shutdown signal");
+            
+            // Wait for shutdown signal
+            while (g_running.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
-            Server server(serverBlock);
-            Logger::info("Server instance created, starting run loop");
-            server.run();
+            
+            // Graceful shutdown
+            Logger::info("Shutdown signal received, stopping all servers");
+            serverManager.stopAll();
+        } else {
+            Logger::error("No server configurations found in config file");
+            return 1;
         }
         Logger::info("Server stopped successfully");
     } catch (const std::exception &e) {
