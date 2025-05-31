@@ -1,6 +1,7 @@
 #pragma once
 #include "Poller.hpp"
 #include "config/Config.hpp"
+#include "utils/FileDescriptor.hpp"
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -12,7 +13,7 @@
 class ClientHandler;
 class Server {
 private:
-  int _server_fd;
+  utils::FileDescriptor _server_fd;
   struct sockaddr_in _address;
   ServerBlock _config;
   Poller _poller;
@@ -26,8 +27,8 @@ public:
   ~Server();
   void run();
   void stop();
-  int getServerFd() const { return _server_fd; }
-  bool isServerSocket(int fd) const { return fd == _server_fd; }
+  int getServerFd() const { return _server_fd.get(); }
+  bool isServerSocket(int fd) const { return fd == _server_fd.get(); }
   const ServerBlock &getConfig() const { return _config; }
   void acceptConnection();
   void handleClientEvent(int fd, short events);

@@ -9,7 +9,7 @@
 extern bool g_running;
 
 Server::Server(const ServerBlock& config) 
-    : _server_fd(-1), _config(config), _running(false) {
+    : _config(config), _running(false) {
     if (getrlimit(RLIMIT_NOFILE, &_rlim) == -1) {
         throw std::runtime_error("Failed to get file descriptor limit");
     }
@@ -27,25 +27,22 @@ Server::Server(const ServerBlock& config)
 }
 
 Server::~Server() {
-  if (_server_fd >= 0) {
-    close(_server_fd);
-  }
-  // std::unique_ptr automatically cleans up _clientHandler
+  // FileDescriptor and unique_ptr will automatically clean up resources
 }
 
 void Server::setupSocket() {
   Logger::debug("Starting socket setup...");
-  _server_fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (_server_fd == -1) {
+  int socketFd = socket(AF_INET, SOCK_STREAM, 0);
+  if (socketFd == -1) {
     Logger::errorf("Failed to create socket: %s", strerror(errno));
     throw std::runtime_error("Failed to create socket");
   }
-  Logger::debugf("Socket created successfully (fd: %d)", _server_fd);
+  _server_fd.reset(socketFd);
+  Logger::debugf("Socket created successfully (fd: %d)", _server_fd.get());
   
   int opt = 1;
-  if (setsockopt(_server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+  if (setsockopt(_server_fd.get(), SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
     Logger::errorf("Failed to set SO_REUSEADDR: %s", strerror(errno));
-    close(_server_fd);
     throw std::runtime_error("Failed to set socket options");
   }
   Logger::debug("SO_REUSEADDR option set successfully");
@@ -61,26 +58,23 @@ void Server::setupSocket() {
   
   if (inet_pton(AF_INET, _config.host.c_str(), &_address.sin_addr) <= 0) {
     Logger::errorf("Failed to convert host address '%s': %s", _config.host.c_str(), strerror(errno));
-    close(_server_fd);
     throw std::runtime_error("Failed to convert host address");
   }
   Logger::debugf("Host address '%s' converted successfully", _config.host.c_str());
   
-  if (bind(_server_fd, (struct sockaddr *)&_address, sizeof(_address)) < 0) {
+  if (bind(_server_fd.get(), (struct sockaddr *)&_address, sizeof(_address)) < 0) {
     Logger::errorf("Failed to bind socket to %s:%d: %s", _config.host.c_str(), port, strerror(errno));
-    close(_server_fd);
     throw std::runtime_error("Failed to bind socket");
   }
   Logger::debugf("Socket bound successfully to %s:%d", _config.host.c_str(), port);
   
-  if (listen(_server_fd, SOMAXCONN) < 0) {
+  if (listen(_server_fd.get(), SOMAXCONN) < 0) {
     Logger::errorf("Failed to listen on socket: %s", strerror(errno));
-    close(_server_fd);
     throw std::runtime_error("Failed to listen on socket");
   }
   Logger::debugf("Socket listening with backlog %d", SOMAXCONN);
   
-  setNonBlocking(_server_fd);
+  setNonBlocking(_server_fd.get());
   Logger::info("Socket setup complete - non-blocking mode enabled");
 }
 
@@ -104,8 +98,8 @@ void Server::run() {
   _running = true;
   Logger::debug("Server run() starting - setting up socket and poller");
   setupSocket();
-  _poller.addFd(_server_fd, POLLIN);
-  Logger::debugf("Added server socket (fd: %d) to poller with POLLIN events", _server_fd);
+  _poller.addFd(_server_fd.get(), POLLIN);
+  Logger::debugf("Added server socket (fd: %d) to poller with POLLIN events", _server_fd.get());
   
   int port = 8080; // default
   if (!_config.listenDirectives.empty()) {
@@ -146,7 +140,7 @@ void Server::acceptConnection() {
   struct sockaddr_in client_addr;
   socklen_t addr_len = sizeof(client_addr);
   int client_fd =
-      accept(_server_fd, (struct sockaddr *)&client_addr, &addr_len);
+      accept(_server_fd.get(), (struct sockaddr *)&client_addr, &addr_len);
   if (client_fd < 0) {
     if (errno != EAGAIN && errno != EWOULDBLOCK) {
       Logger::errorf("Accept failed: %s (errno: %d)", strerror(errno), errno);
@@ -198,8 +192,5 @@ void Server::handleClientEvent(int fd, short events) {
 
 void Server::stop() {
   _running = false;
-  if (_server_fd >= 0) {
-    close(_server_fd);
-    _server_fd = -1;
-  }
+  // FileDescriptor will automatically close when needed
 }
