@@ -1,6 +1,6 @@
 #include "ClientHandler.hpp"
 #include "Server.hpp"
-#include "utils/HttpResponseBuilder.hpp"
+#include "HTTP/HttpResponseBuilder.hpp"
 #include "utils/Logger.hpp"
 #include <cerrno>
 #include <cstring>

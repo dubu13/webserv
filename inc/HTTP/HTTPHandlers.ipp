@@ -1,12 +1,12 @@
 #pragma once
 #include "HTTP/HTTPTypes.hpp"
+#include "HTTP/HttpParser.hpp"
 #include "config/ServerBlock.ipp"
-#include "utils/HttpResponseBuilder.hpp"
+#include "HTTP/HttpResponseBuilder.hpp"
 #include "utils/FileUtils.hpp"
 #include "utils/Logger.hpp"
 #include <map>
 #include <string>
-#include <functional>
 #include <ctime>
 
 // HTTP Request/Response handler implementations
@@ -14,14 +14,8 @@
 
 namespace HTTP {
 
-// Forward declarations
-struct Request;
-
-// Handler function types for different HTTP methods
-using MethodHandler = std::function<std::string(const Request&, const std::string&, const std::string&, const LocationBlock*)>;
-
 // HTTP Method Handler implementations
-inline std::string handleGetRequest(const Request& request, const std::string& effectiveRoot, 
+inline std::string handleGetRequest(const HttpParser::Request& request, const std::string& effectiveRoot, 
                                    const std::string& effectiveUri, const LocationBlock* location) {
     (void)request;  // Unused parameter
     (void)location; // Unused parameter
@@ -45,7 +39,7 @@ inline std::string handleGetRequest(const Request& request, const std::string& e
     return HttpResponseBuilder::createFileResponse(status, content, mimeType);
 }
 
-inline std::string handlePostRequest(const Request& request, const std::string& effectiveRoot, 
+inline std::string handlePostRequest(const HttpParser::Request& request, const std::string& effectiveRoot, 
                                     const std::string& effectiveUri, const LocationBlock* location) {
     Logger::debug("Processing POST request");
     
@@ -71,7 +65,7 @@ inline std::string handlePostRequest(const Request& request, const std::string& 
         status, success ? "File uploaded successfully" : "Upload failed");
 }
 
-inline std::string handleDeleteRequest(const Request& request, const std::string& effectiveRoot, 
+inline std::string handleDeleteRequest(const HttpParser::Request& request, const std::string& effectiveRoot, 
                                       const std::string& effectiveUri, const LocationBlock* location) {
     (void)request;  // Unused parameter
     (void)location; // Unused parameter
@@ -85,7 +79,7 @@ inline std::string handleDeleteRequest(const Request& request, const std::string
 }
 
 // Request processing utilities
-inline bool validateMethodForLocation(const Request& request, const LocationBlock* location) {
+inline bool validateMethodForLocation(const HttpParser::Request& request, const LocationBlock* location) {
     if (!location || location->allowedMethods.empty()) {
         return true; // No restrictions
     }

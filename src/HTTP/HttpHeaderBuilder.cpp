@@ -1,4 +1,4 @@
-#include "utils/HttpHeaderBuilder.hpp"
+#include "HTTP/HttpHeaderBuilder.hpp"
 #include <ctime>
 #include <iomanip>
 #include <sstream>
@@ -37,36 +37,6 @@ void setConnection(std::map<std::string, std::string>& headers, bool keepAlive) 
     }
 }
 
-// Additional HTTP header functions
-void setLocation(std::map<std::string, std::string>& headers, const std::string& location) {
-    headers["Location"] = location;
-}
-
-void setLastModified(std::map<std::string, std::string>& headers, const std::string& datetime) {
-    headers["Last-Modified"] = datetime;
-}
-
-void setExpires(std::map<std::string, std::string>& headers, const std::string& datetime) {
-    headers["Expires"] = datetime;
-}
-
-void setETag(std::map<std::string, std::string>& headers, const std::string& etag) {
-    headers["ETag"] = etag;
-}
-
-void setTransferEncoding(std::map<std::string, std::string>& headers, const std::string& encoding) {
-    headers["Transfer-Encoding"] = encoding;
-}
-
-std::map<std::string, std::string> createHtmlHeaders(size_t contentLength) {
-    std::map<std::string, std::string> headers;
-    setContentType(headers, "text/html");
-    setContentLength(headers, contentLength);
-    setServer(headers);
-    setDate(headers);
-    return headers;
-}
-
 std::map<std::string, std::string> createPlainTextHeaders(size_t contentLength) {
     std::map<std::string, std::string> headers;
     setContentType(headers, "text/plain");
@@ -99,15 +69,6 @@ std::map<std::string, std::string> createErrorHeaders(size_t contentLength) {
     setServer(headers);
     setDate(headers);
     setCacheControl(headers, "no-cache");
-    return headers;
-}
-
-std::map<std::string, std::string> createBasicHeaders(const std::string& contentType, size_t contentLength) {
-    std::map<std::string, std::string> headers;
-    setContentType(headers, contentType);
-    setContentLength(headers, contentLength);
-    setServer(headers);
-    setDate(headers);
     return headers;
 }
 

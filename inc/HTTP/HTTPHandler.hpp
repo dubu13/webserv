@@ -1,5 +1,6 @@
 #pragma once
-#include "HTTP/HTTP.hpp"
+#include "HTTP/HTTPTypes.hpp"
+#include "HTTP/HttpParser.hpp"
 #include "config/Config.hpp"
 #include "resource/CGIHandler.hpp"
 #include "utils/FileUtils.hpp"
@@ -13,7 +14,7 @@ private:
   const ServerBlock *_config;
   
   // Helper methods
-  std::string handleCgiRequest(const HTTP::Request& request, const std::string& effectiveRoot, const std::string& effectiveUri);
+  std::string handleCgiRequest(const HttpParser::Request& request, const std::string& effectiveRoot, const std::string& effectiveUri);
   
 public:
   HTTPHandler(const std::string &root = "./www",

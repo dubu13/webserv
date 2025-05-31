@@ -1,6 +1,6 @@
 #include "HTTP/HTTPHandler.hpp"
 #include "utils/FileUtils.hpp"
-#include "utils/HttpResponseBuilder.hpp"
+#include "HTTP/HttpResponseBuilder.hpp"
 #include "utils/Logger.hpp"
 #include <iostream>
 #include <ctime>
@@ -33,8 +33,8 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
   Logger::debugf("HTTPHandler processing request (%zu bytes)", requestData.size());
   
   try {
-    HTTP::Request request;
-    if (!HTTP::parseRequest(requestData, request)) {
+    HttpParser::Request request;
+    if (!HttpParser::parseRequest(requestData, request)) {
       Logger::warn("Failed to parse HTTP request - malformed request");
       Logger::debugf("Raw request data: %s", requestData.substr(0, std::min(requestData.size(), size_t(200))).c_str());
       return HttpResponseBuilder::createErrorResponse(HTTP::StatusCode::BAD_REQUEST);
@@ -44,6 +44,7 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
     std::string methodStr = HTTP::methodToString(request.requestLine.method);
     Logger::infof("Processing %s request for URI: %s", methodStr.c_str(), uri.c_str());
     
+    #ifdef DEBUG
     // Log important headers
     for (const auto& [key, value] : request.headers) {
       if (key == "Host" || key == "Content-Length" || key == "Content-Type" || key == "Connection") {
@@ -54,6 +55,7 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
     if (!request.body.empty()) {
       Logger::debugf("Request body length: %zu bytes", request.body.length());
     }
+    #endif
 
     // Get location configuration for this URI
     const LocationBlock *location = nullptr;
@@ -100,7 +102,7 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
   }
 }
 
-std::string HTTPHandler::handleCgiRequest(const HTTP::Request& request, const std::string& effectiveRoot, const std::string& effectiveUri) {
+std::string HTTPHandler::handleCgiRequest(const HttpParser::Request& request, const std::string& effectiveRoot, const std::string& effectiveUri) {
     Logger::infof("Handling CGI request for: %s", effectiveUri.c_str());
     
     // Temporarily set CGI handler root for this request

@@ -14,17 +14,8 @@ namespace HttpHeaderBuilder {
     void setDate(std::map<std::string, std::string>& headers);
     void setConnection(std::map<std::string, std::string>& headers, bool keepAlive);
     
-    // Additional useful headers for HTTP compliance
-    void setLocation(std::map<std::string, std::string>& headers, const std::string& location);
-    void setLastModified(std::map<std::string, std::string>& headers, const std::string& datetime);
-    void setExpires(std::map<std::string, std::string>& headers, const std::string& datetime);
-    void setETag(std::map<std::string, std::string>& headers, const std::string& etag);
-    void setTransferEncoding(std::map<std::string, std::string>& headers, const std::string& encoding = "chunked");
-    
     // Common header patterns (return ready-to-use header maps)
-    std::map<std::string, std::string> createHtmlHeaders(size_t contentLength);
     std::map<std::string, std::string> createPlainTextHeaders(size_t contentLength);
     std::map<std::string, std::string> createFileHeaders(const std::string& mimeType, size_t contentLength, bool cacheable = true);
     std::map<std::string, std::string> createErrorHeaders(size_t contentLength);
-    std::map<std::string, std::string> createBasicHeaders(const std::string& contentType, size_t contentLength);
 }

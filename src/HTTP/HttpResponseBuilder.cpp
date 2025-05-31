@@ -1,7 +1,7 @@
-#include "utils/HttpResponseBuilder.hpp"
-#include "utils/HttpHeaderBuilder.hpp"
-#include "utils/Logger.hpp"
+#include "HTTP/HttpResponseBuilder.hpp"
+#include "HTTP/HttpHeaderBuilder.hpp"
 #include "HTTP/HTTPTypes.hpp"
+#include "utils/Logger.hpp"
 
 namespace HttpResponseBuilder {
 
