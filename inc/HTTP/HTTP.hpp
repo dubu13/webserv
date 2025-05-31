@@ -15,7 +15,6 @@ struct Request {
 
 bool parseRequest(const std::string &data, Request &request);
 RequestLine parseRequestLine(const std::string &line);
-std::map<std::string, std::string> parseHeaders(const std::string &headerSection);
 
 std::string getHeader(const std::map<std::string, std::string> &headers, const std::string &key);
 void setHeader(std::map<std::string, std::string> &headers, const std::string &key, const std::string &value);

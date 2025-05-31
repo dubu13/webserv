@@ -1,5 +1,5 @@
 #include "HTTP/HTTP.hpp"
-#include "utils/StringUtils.hpp"
+#include "utils/HttpUtils.hpp"
 #include "utils/Logger.hpp"
 #include <iostream>
 #include <sstream>
@@ -27,9 +27,9 @@ bool parseRequest(const std::string &data, Request &request) {
       return false;
     }
     
-    std::string headersStr = data.substr(headerStart, headerEnd - headerStart);
-    Logger::debugf("HTTP headers section (%zu bytes)", headersStr.size());
-    request.headers = parseHeaders(headersStr);
+    std::string_view headersView = std::string_view(data).substr(headerStart, headerEnd - headerStart);
+    Logger::debugf("HTTP headers section (%zu bytes)", headersView.size());
+    HttpUtils::parseHeaders(headersView, request.headers);
     Logger::debugf("Parsed %zu HTTP headers", request.headers.size());
     
     size_t bodyStart = headerEnd + 4;
@@ -56,43 +56,15 @@ bool parseRequest(const std::string &data, Request &request) {
 RequestLine parseRequestLine(const std::string &line) {
   RequestLine requestLine;
   
-  const char* data = line.c_str();
-  const char* end = data + line.length();
-  const char* current = data;
+  std::string_view lineView(line);
+  auto [method, rest] = HttpUtils::splitFirst(lineView, ' ');
+  auto [uri, version] = HttpUtils::splitFirst(HttpUtils::trimWhitespace(rest), ' ');
   
-  const char* methodEnd = StringUtils::findNextSpace(current, end);
-  if (methodEnd < end) {
-    std::string methodStr = StringUtils::extractToken(current, methodEnd);
-    requestLine.method = stringToMethod(methodStr);
-    
-    current = StringUtils::skipWhitespace(methodEnd, end);
-    const char* uriEnd = StringUtils::findNextSpace(current, end);
-    if (uriEnd < end) {
-      requestLine.uri = StringUtils::extractToken(current, uriEnd);
-      current = StringUtils::skipWhitespace(uriEnd, end);
-      requestLine.version = StringUtils::extractToken(current, end);
-    }
-  }
+  requestLine.method = stringToMethod(std::string(method));
+  requestLine.uri = std::string(HttpUtils::trimWhitespace(uri));
+  requestLine.version = std::string(HttpUtils::trimWhitespace(version));
   
   return requestLine;
-}
-
-std::map<std::string, std::string> parseHeaders(const std::string &headerSection) {
-  std::map<std::string, std::string> headers;
-  
-  const char* data = headerSection.c_str();
-  const char* end = data + headerSection.length();
-  const char* lineStart = data;
-  
-  while (lineStart < end) {
-    const char* lineEnd = StringUtils::findLineEnd(lineStart, end);
-    if (lineEnd == lineStart) break;
-    
-    StringUtils::parseHeaderLine(lineStart, lineEnd, headers);
-    lineStart = StringUtils::skipLineTerminators(lineEnd, end);
-  }
-  
-  return headers;
 }
 
 std::string getHeader(const std::map<std::string, std::string> &headers, const std::string &key) {
@@ -140,9 +112,7 @@ std::string createSimpleResponse(StatusCode status, const std::string &message) 
   Logger::debugf("HTTP::createSimpleResponse - Creating simple response with status %d and message length %zu", 
                  static_cast<int>(status), message.size());
   
-  std::map<std::string, std::string> headers;
-  headers["Content-Type"] = "text/plain";
-  headers["Content-Length"] = std::to_string(message.size());
+  auto headers = HttpUtils::createPlainTextHeaders(message.size());
   return buildResponse(status, headers, message);
 }
 
@@ -159,9 +129,7 @@ std::string createErrorResponse(StatusCode status, const std::string &errorMessa
     Logger::debugf("Using provided error message: %zu bytes", body.size());
   }
   
-  std::map<std::string, std::string> headers;
-  headers["Content-Type"] = "text/html";
-  headers["Content-Length"] = std::to_string(body.size());
+  auto headers = HttpUtils::createErrorHeaders(body.size());
   return buildResponse(status, headers, body);
 }
 
@@ -169,16 +137,8 @@ std::string createFileResponse(StatusCode status, const std::string &content, co
   Logger::debugf("HTTP::createFileResponse - Creating file response with status %d, content-type '%s', content length %zu", 
                  static_cast<int>(status), contentType.c_str(), content.size());
   
-  std::map<std::string, std::string> headers;
-  headers["Content-Type"] = contentType;
-  headers["Content-Length"] = std::to_string(content.size());
-  
-  // Simple cache control for successful responses
-  if (status == StatusCode::OK) {
-    headers["Cache-Control"] = "public, max-age=3600";
-    Logger::debug("Added cache control headers for successful response");
-  }
-  
+  bool cacheable = (status == StatusCode::OK);
+  auto headers = HttpUtils::createFileHeaders(contentType, content.size(), cacheable);
   return buildResponse(status, headers, content);
 }
 

@@ -8,6 +8,7 @@
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <memory>
 class ClientHandler;
 class Server {
 private:
@@ -15,7 +16,7 @@ private:
   struct sockaddr_in _address;
   ServerBlock _config;
   Poller _poller;
-  ClientHandler *_clientHandler;
+  std::unique_ptr<ClientHandler> _clientHandler;
   rlimit _rlim;
   bool _running;
   void setupSocket();

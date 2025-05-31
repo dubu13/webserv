@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <iostream>
 #include <stdexcept>
+#include <memory>
 
 extern bool g_running;
 
@@ -21,15 +22,15 @@ Server::Server(const ServerBlock& config)
     }
     Logger::infof("Server will listen on %s:%d", config.host.c_str(), port);
     
-    // Create the ClientHandler with configuration
-    _clientHandler = new ClientHandler(*this, config.root, 60);  // TODO: make timeout configurable
+    // Create the ClientHandler with configuration  
+    _clientHandler = std::make_unique<ClientHandler>(*this, config.root, 60);  // TODO: make timeout configurable
 }
 
 Server::~Server() {
   if (_server_fd >= 0) {
     close(_server_fd);
   }
-  delete _clientHandler;
+  // std::unique_ptr automatically cleans up _clientHandler
 }
 
 void Server::setupSocket() {
