@@ -1,6 +1,6 @@
 #include "CGIHandler.hpp"
 #include "HTTP/HTTP.hpp"
-#include "utils/HttpUtils.hpp"
+#include "utils/HttpResponseBuilder.hpp"
 #include "utils/Logger.hpp"
 #include <iostream>
 
@@ -72,6 +72,6 @@ std::string CGIHandler::executeScript(const std::string &script_path,
   (void)script_path;
   (void)handler_path;
   (void)request;
-  return HttpUtils::createSimpleResponse(HTTP::StatusCode::OK,
+  return HttpResponseBuilder::createSimpleResponse(HTTP::StatusCode::OK,
                                     "CGI execution not implemented yet");
 }

@@ -11,6 +11,10 @@ private:
   std::map<HTTP::StatusCode, std::string> _custom_error_pages;
   CGIHandler _cgiHandler;
   const ServerBlock *_config;
+  
+  // Helper methods
+  std::string handleCgiRequest(const HTTP::Request& request, const std::string& effectiveRoot, const std::string& effectiveUri);
+  
 public:
   HTTPHandler(const std::string &root = "./www",
               const ServerBlock *config = nullptr);

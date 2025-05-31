@@ -1,5 +1,5 @@
 #include "HTTP/HTTP.hpp"
-#include "utils/HttpUtils.hpp"
+#include "utils/HttpParser.hpp"
 #include "utils/Logger.hpp"
 #include <iostream>
 #include <sstream>
@@ -29,7 +29,7 @@ bool parseRequest(const std::string &data, Request &request) {
     
     std::string_view headersView = std::string_view(data).substr(headerStart, headerEnd - headerStart);
     Logger::debugf("HTTP headers section (%zu bytes)", headersView.size());
-    HttpUtils::parseHeaders(headersView, request.headers);
+    HttpParser::parseHeaders(headersView, request.headers);
     Logger::debugf("Parsed %zu HTTP headers", request.headers.size());
     
     size_t bodyStart = headerEnd + 4;
@@ -57,12 +57,12 @@ RequestLine parseRequestLine(const std::string &line) {
   RequestLine requestLine;
   
   std::string_view lineView(line);
-  auto [method, rest] = HttpUtils::splitFirst(lineView, ' ');
-  auto [uri, version] = HttpUtils::splitFirst(HttpUtils::trimWhitespace(rest), ' ');
+  auto [method, rest] = HttpParser::splitFirst(lineView, ' ');
+  auto [uri, version] = HttpParser::splitFirst(HttpParser::trimWhitespace(rest), ' ');
   
   requestLine.method = stringToMethod(std::string(method));
-  requestLine.uri = std::string(HttpUtils::trimWhitespace(uri));
-  requestLine.version = std::string(HttpUtils::trimWhitespace(version));
+  requestLine.uri = std::string(HttpParser::trimWhitespace(uri));
+  requestLine.version = std::string(HttpParser::trimWhitespace(version));
   
   return requestLine;
 }

@@ -1,6 +1,6 @@
 #include "ClientHandler.hpp"
 #include "Server.hpp"
-#include "utils/HttpUtils.hpp"
+#include "utils/HttpResponseBuilder.hpp"
 #include "utils/Logger.hpp"
 #include <cerrno>
 #include <cstring>
@@ -139,13 +139,13 @@ void ClientHandler::handleRead(int fd) {
   if (bytes < 0) {
     if (bytes == -2) {
       Logger::warnf("Payload too large for client fd: %d", fd);
-      std::string errorResponse = HttpUtils::createErrorResponse(HTTP::StatusCode::PAYLOAD_TOO_LARGE);
+      std::string errorResponse = HttpResponseBuilder::createErrorResponse(HTTP::StatusCode::PAYLOAD_TOO_LARGE);
       client.outgoingData = errorResponse;
       _server.getPoller().setFdEvents(fd, POLLOUT);
       return;
     } else if (bytes == -1) {
       Logger::errorf("Read error for client fd: %d", fd);
-      std::string errorResponse = HttpUtils::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
+      std::string errorResponse = HttpResponseBuilder::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
       client.outgoingData = errorResponse;
       _server.getPoller().setFdEvents(fd, POLLOUT);
       return;
@@ -244,7 +244,7 @@ void ClientHandler::sendError(int fd, int status) {
   if (it == _clients.end()) return;
   
   try {
-    std::string response = HttpUtils::createErrorResponse(static_cast<HTTP::StatusCode>(status));
+    std::string response = HttpResponseBuilder::createErrorResponse(static_cast<HTTP::StatusCode>(status));
     it->second.outgoingData = response;
     _server.getPoller().setFdEvents(fd, POLLOUT);
   } catch (const std::exception &e) {
