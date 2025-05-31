@@ -1,5 +1,6 @@
 #include "ClientHandler.hpp"
 #include "Server.hpp"
+#include "utils/HttpUtils.hpp"
 #include "utils/Logger.hpp"
 #include <cerrno>
 #include <cstring>
@@ -19,14 +20,12 @@ bool ClientHandler::hasCompleteRequest(const std::string &data) const {
   size_t pos = data.find("\r\n\r\n");
   if (pos == std::string::npos) return false;
   
-  // Check if it's a POST request with Content-Length
   size_t contentLengthPos = data.find("Content-Length:");
   if (contentLengthPos != std::string::npos && contentLengthPos < pos) {
     size_t valueStart = data.find(":", contentLengthPos) + 1;
     size_t valueEnd = data.find("\r\n", valueStart);
     if (valueEnd != std::string::npos) {
       std::string lengthStr = data.substr(valueStart, valueEnd - valueStart);
-      // Trim whitespace
       lengthStr.erase(0, lengthStr.find_first_not_of(" \t"));
       lengthStr.erase(lengthStr.find_last_not_of(" \t") + 1);
       
@@ -40,7 +39,7 @@ bool ClientHandler::hasCompleteRequest(const std::string &data) const {
     }
   }
   
-  return true; // GET requests and others without body
+  return true;
 }
 
 ssize_t ClientHandler::readClientData(int fd, std::string &incomingData, size_t maxSize) {
@@ -53,16 +52,16 @@ ssize_t ClientHandler::readClientData(int fd, std::string &incomingData, size_t 
     if (incomingData.length() + bytesRead > maxSize) {
       Logger::warnf("Payload too large: current=%zu, incoming=%zd, max=%zu", 
                     incomingData.length(), bytesRead, maxSize);
-      return -2; // Payload too large
+      return -2;
     }
     incomingData.append(buffer, bytesRead);
     Logger::debugf("Appended %zd bytes to client data (total: %zu bytes)", bytesRead, incomingData.length());
   } else if (bytesRead == 0) {
     Logger::debugf("Connection closed by client (fd: %d)", fd);
-    return 0; // Connection closed
+    return 0;
   } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
     Logger::debugf("recv() error on fd %d: %s (errno: %d)", fd, strerror(errno), errno);
-    return -1; // Error
+    return -1;
   } else {
     Logger::debugf("recv() would block on fd %d", fd);
   }
@@ -86,10 +85,10 @@ ssize_t ClientHandler::writeClientData(int fd, std::string &outgoingData) {
     Logger::debugf("Sent %zd bytes, %zu bytes remaining in buffer", bytesSent, outgoingData.length());
   } else if (bytesSent == 0) {
     Logger::debugf("Connection closed during write (fd: %d)", fd);
-    return 0; // Connection closed
+    return 0;
   } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
     Logger::debugf("send() error on fd %d: %s (errno: %d)", fd, strerror(errno), errno);
-    return -1; // Error
+    return -1;
   } else {
     Logger::debugf("send() would block on fd %d", fd);
   }
@@ -104,6 +103,7 @@ void ClientHandler::addClient(int fd, const struct sockaddr_in &addr) {
   Logger::infof("Client connected: %s:%d (fd: %d)", 
                 client.getIpAddress().c_str(), client.getPort(), fd);
 }
+
 void ClientHandler::removeClient(int fd) {
   auto it = _clients.find(fd);
   if (it != _clients.end()) {
@@ -139,13 +139,13 @@ void ClientHandler::handleRead(int fd) {
   if (bytes < 0) {
     if (bytes == -2) {
       Logger::warnf("Payload too large for client fd: %d", fd);
-      std::string errorResponse = HTTP::createErrorResponse(HTTP::StatusCode::PAYLOAD_TOO_LARGE);
+      std::string errorResponse = HttpUtils::createErrorResponse(HTTP::StatusCode::PAYLOAD_TOO_LARGE);
       client.outgoingData = errorResponse;
       _server.getPoller().setFdEvents(fd, POLLOUT);
       return;
     } else if (bytes == -1) {
       Logger::errorf("Read error for client fd: %d", fd);
-      std::string errorResponse = HTTP::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
+      std::string errorResponse = HttpUtils::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
       client.outgoingData = errorResponse;
       _server.getPoller().setFdEvents(fd, POLLOUT);
       return;
@@ -169,6 +169,7 @@ void ClientHandler::handleRead(int fd) {
     _server.getPoller().setFdEvents(fd, POLLIN | POLLOUT);
   }
 }
+
 void ClientHandler::handleWrite(int fd) {
   Logger::debugf("Handling write for fd: %d", fd);
   auto it = _clients.find(fd);
@@ -243,7 +244,7 @@ void ClientHandler::sendError(int fd, int status) {
   if (it == _clients.end()) return;
   
   try {
-    std::string response = HTTP::createErrorResponse(static_cast<HTTP::StatusCode>(status));
+    std::string response = HttpUtils::createErrorResponse(static_cast<HTTP::StatusCode>(status));
     it->second.outgoingData = response;
     _server.getPoller().setFdEvents(fd, POLLOUT);
   } catch (const std::exception &e) {

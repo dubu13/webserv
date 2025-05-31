@@ -57,23 +57,17 @@ void Config::parseServerBlock(const std::string& content, ServerBlock& server) {
         
         Logger::debugf("Processing directive: '%s' with value: '%s'", directive.c_str(), value.c_str());
         
-        // Handle location blocks specially
         if (directive == "location") {
-            // Extract location path from value (format: "/ {" or "/path {")
             std::string locationPath = value;
-            
-            // Remove the opening brace if present
+
             size_t bracePos = locationPath.find('{');
-            if (bracePos != std::string::npos) {
+            if (bracePos != std::string::npos)
                 locationPath = locationPath.substr(0, bracePos);
-            }
             locationPath = ConfigUtils::trim(locationPath);
             
-            if (locationPath.empty() || !ConfigUtils::isValidPath(locationPath)) {
+            if (locationPath.empty() || !ConfigUtils::isValidPath(locationPath))
                 throw std::invalid_argument("Invalid location path: " + locationPath);
-            }
-            
-            // Extract location block content
+
             std::string locationContent = line + "\n";
             int braceCount = 1;
             while (std::getline(iss, line) && braceCount > 0) {
@@ -81,9 +75,8 @@ void Config::parseServerBlock(const std::string& content, ServerBlock& server) {
                     if (c == '{') braceCount++;
                     else if (c == '}') braceCount--;
                 }
-                if (braceCount > 0) {
+                if (braceCount > 0)
                     locationContent += line + "\n";
-                }
             }
             
             LocationBlock location;
@@ -94,8 +87,6 @@ void Config::parseServerBlock(const std::string& content, ServerBlock& server) {
             Logger::debugf("Added location %s with root: %s", locationPath.c_str(), location.root.c_str());
             continue;
         }
-        
-        // Use hash map for directive handling
         auto it = _serverHandlers.find(directive);
         if (it != _serverHandlers.end()) {
             Logger::debugf("Handling server directive: %s = %s", directive.c_str(), value.c_str());
@@ -108,11 +99,8 @@ void Config::parseServerBlock(const std::string& content, ServerBlock& server) {
     
     Logger::debugf("Server block parsed. Root: %s, Locations: %zu", 
                    server.root.c_str(), server.locations.size());
-    
-    // Validate required fields
-    if (server.listenDirectives.empty()) {
+    if (server.listenDirectives.empty())
         throw std::invalid_argument("Server block must have at least one listen directive");
-    }
 }
 
 void Config::parseLocationBlock(const std::string& content, LocationBlock& location) {
@@ -126,7 +114,6 @@ void Config::parseLocationBlock(const std::string& content, LocationBlock& locat
         
         Logger::debugf("Location directive: '%s' = '%s'", directive.c_str(), value.c_str());
         
-        // Use hash map for directive handling
         auto it = _locationHandlers.find(directive);
         if (it != _locationHandlers.end()) {
             (this->*(it->second))(value, location);

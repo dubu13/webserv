@@ -3,6 +3,7 @@
 #include <string>
 #include <map>
 #include <string_view>
+#include "HTTP/HTTPTypes.hpp"
 
 namespace HttpUtils {
   // Modern string_view parsing utilities (high performance, safe)
@@ -37,5 +38,12 @@ namespace HttpUtils {
   std::map<std::string, std::string> createFileHeaders(const std::string& mimeType, size_t contentLength, bool cacheable = true);
   std::map<std::string, std::string> createErrorHeaders(size_t contentLength);
   std::map<std::string, std::string> createBasicHeaders(const std::string& contentType, size_t contentLength);
+
+  // HTTP response building utilities
+  std::string buildResponse(HTTP::StatusCode status, const std::map<std::string, std::string>& headers, 
+                           const std::string& body, bool keepAlive = false);
+  std::string createSimpleResponse(HTTP::StatusCode status, const std::string& message);
+  std::string createErrorResponse(HTTP::StatusCode status, const std::string& errorMessage = "");
+  std::string createFileResponse(HTTP::StatusCode status, const std::string& content, const std::string& contentType);
 
 }

@@ -1,5 +1,6 @@
 #include "utils/HttpUtils.hpp"
 #include "utils/Logger.hpp"
+#include "HTTP/HTTPTypes.hpp"
 #include <string>
 #include <map>
 #include <string_view>
@@ -9,7 +10,6 @@
 
 namespace HttpUtils {
 
-// Modern string_view implementations for better performance
 std::string_view trimWhitespace(std::string_view str) {
     const char* whitespace = " \t\r\n";
     size_t start = str.find_first_not_of(whitespace);
@@ -33,10 +33,8 @@ std::string_view extractValue(std::string_view header_line) {
 }
 
 std::pair<std::string_view, std::string_view> parseRequestLine(std::string_view line) {
-    // Split method and rest
+
     auto [method, rest] = splitFirst(line, ' ');
-    
-    // Split URI and version
     auto [uri, version] = splitFirst(trimWhitespace(rest), ' ');
     
     return {trimWhitespace(uri), trimWhitespace(version)};
@@ -69,7 +67,7 @@ void parseHeaders(std::string_view headerSection, std::map<std::string, std::str
             parseHeaderLine(line, headers);
         }
         
-        start = end + 2; // Skip \r\n
+        start = end + 2;
         if (start >= headerSection.length()) break;
     }
 }
@@ -98,7 +96,6 @@ size_t estimateResponseSize(const std::string& version,
   return estimated;
 }
 
-// HTTP header building utilities (stateless functions)
 
 void setContentType(std::map<std::string, std::string>& headers, const std::string& type) {
     headers["Content-Type"] = type;
@@ -125,7 +122,6 @@ void setDate(std::map<std::string, std::string>& headers) {
     headers["Date"] = oss.str();
 }
 
-// Common header patterns (return ready-to-use header maps)
 std::map<std::string, std::string> createHtmlHeaders(size_t contentLength) {
     std::map<std::string, std::string> headers;
     setContentType(headers, "text/html");
@@ -174,6 +170,68 @@ std::map<std::string, std::string> createBasicHeaders(const std::string& content
     setServer(headers);
     setDate(headers);
     return headers;
+}
+
+std::string buildResponse(HTTP::StatusCode status, const std::map<std::string, std::string>& headers, 
+                         const std::string& body, bool keepAlive) {
+  Logger::debugf("HttpUtils::buildResponse - Building response with status %d, %zu headers, %zu body bytes, keepAlive=%s", 
+                 static_cast<int>(status), headers.size(), body.size(), keepAlive ? "true" : "false");
+  
+  std::string response;
+  response.reserve(256 + body.length() + headers.size() * 50);
+  
+  response += "HTTP/1.1 " + std::to_string(static_cast<int>(status)) + " " + HTTP::statusToString(status) + "\r\n";
+  
+  if (keepAlive) {
+    response += "Connection: keep-alive\r\nKeep-Alive: timeout=5, max=100\r\n";
+  } else {
+    response += "Connection: close\r\n";
+  }
+  
+  for (const auto& header : headers) {
+    if (header.first != "Connection" && header.first != "Keep-Alive") {
+      response += header.first + ": " + header.second + "\r\n";
+      Logger::debugf("HTTP response header: %s: %s", header.first.c_str(), header.second.c_str());
+    }
+  }
+  
+  response += "\r\n" + body;
+  Logger::debugf("HTTP response built successfully: %zu total bytes", response.size());
+  return response;
+}
+
+std::string createSimpleResponse(HTTP::StatusCode status, const std::string& message) {
+  Logger::debugf("HttpUtils::createSimpleResponse - Creating simple response with status %d and message length %zu", 
+                 static_cast<int>(status), message.size());
+  
+  auto headers = createPlainTextHeaders(message.size());
+  return buildResponse(status, headers, message);
+}
+
+std::string createErrorResponse(HTTP::StatusCode status, const std::string& errorMessage) {
+  Logger::debugf("HttpUtils::createErrorResponse - Creating error response with status %d", static_cast<int>(status));
+  
+  std::string body = errorMessage;
+  if (body.empty()) {
+    std::string statusStr = std::to_string(static_cast<int>(status));
+    std::string statusText = HTTP::statusToString(status);
+    body = "<html><body><h1>" + statusStr + " " + statusText + "</h1></body></html>";
+    Logger::debugf("Generated default error body: %zu bytes", body.size());
+  } else {
+    Logger::debugf("Using provided error message: %zu bytes", body.size());
+  }
+  
+  auto headers = createErrorHeaders(body.size());
+  return buildResponse(status, headers, body);
+}
+
+std::string createFileResponse(HTTP::StatusCode status, const std::string& content, const std::string& contentType) {
+  Logger::debugf("HttpUtils::createFileResponse - Creating file response with status %d, content-type '%s', content length %zu", 
+                 static_cast<int>(status), contentType.c_str(), content.size());
+  
+  bool cacheable = (status == HTTP::StatusCode::OK);
+  auto headers = createFileHeaders(contentType, content.size(), cacheable);
+  return buildResponse(status, headers, content);
 }
 
 }

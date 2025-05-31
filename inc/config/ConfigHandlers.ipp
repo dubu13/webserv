@@ -1,10 +1,6 @@
 #pragma once
 #include "config/ConfigUtils.hpp"
 
-// Consolidated directive handler implementations
-// These are inline implementations to be included in Config.cpp
-
-// Handler initialization methods
 inline void Config::initializeHandlers() {
     initializeServerHandlers();
     initializeLocationHandlers();
@@ -36,7 +32,6 @@ inline void Config::initializeLocationHandlers() {
     };
 }
 
-// Server directive handlers
 inline void Config::handleListen(const std::string& value, ServerBlock& server) {
     auto [host, port] = ConfigUtils::parseListenDirective(value);
     server.listenDirectives.push_back({host, port});
@@ -79,7 +74,6 @@ inline void Config::handleClientMaxBodySize(const std::string& value, ServerBloc
     server.clientMaxBodySize = ConfigUtils::parseSize(value);
 }
 
-// Location directive handlers
 inline void Config::handleLocationRoot(const std::string& value, LocationBlock& location) {
     if (!ConfigUtils::isValidPath(value)) {
         throw std::invalid_argument("Invalid location root: " + value);

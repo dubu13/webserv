@@ -16,32 +16,25 @@ class Config {
 private:
     std::string _fileName;
     std::unordered_map<std::string, ServerBlock> _servers;
-    
-    // Function pointer types for directive handlers
+
     using ServerDirectiveHandler = void (Config::*)(const std::string&, ServerBlock&);
     using LocationDirectiveHandler = void (Config::*)(const std::string&, LocationBlock&);
-    
-    // Directive handler maps
+
     std::unordered_map<std::string, ServerDirectiveHandler> _serverHandlers;
     std::unordered_map<std::string, LocationDirectiveHandler> _locationHandlers;
-    
-    // Handler initialization methods
+
     void initializeHandlers();
     void initializeServerHandlers();
     void initializeLocationHandlers();
-    
 
-    // Core parsing methods
     void parseServerBlock(const std::string& content, ServerBlock& server);
     void parseLocationBlock(const std::string& content, LocationBlock& location);
 
 public:
     explicit Config(const std::string& fileName);
-    
-    // Main parsing interface
+
     void parseFromFile();
     
-    // Access methods
     const std::unordered_map<std::string, ServerBlock>& getServers() const;
     const ServerBlock* getServer(const std::string& host, int port) const;
 

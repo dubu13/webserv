@@ -1,6 +1,5 @@
 #pragma once
 
-// LocationBlock struct definition and implementation
 struct LocationBlock {
     std::string path;
     std::string root;
@@ -17,7 +16,6 @@ struct LocationBlock {
     bool matchesPath(const std::string& requestPath) const;
 };
 
-// LocationBlock implementation
 inline LocationBlock::LocationBlock() 
     : autoindex(false), uploadEnable(false) {
     allowedMethods.insert("GET");

@@ -20,10 +20,4 @@ std::string getHeader(const std::map<std::string, std::string> &headers, const s
 void setHeader(std::map<std::string, std::string> &headers, const std::string &key, const std::string &value);
 bool hasHeader(const std::map<std::string, std::string> &headers, const std::string &key);
 
-std::string buildResponse(StatusCode status, const std::map<std::string, std::string> &headers, 
-                         const std::string &body, bool keepAlive = false);
-std::string createSimpleResponse(StatusCode status, const std::string &message);
-std::string createErrorResponse(StatusCode status, const std::string &errorMessage = "");
-std::string createFileResponse(StatusCode status, const std::string &content, const std::string &contentType);
-
 }

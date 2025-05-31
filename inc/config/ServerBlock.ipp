@@ -1,6 +1,5 @@
 #pragma once
 
-// ServerBlock struct definition and implementation
 struct ServerBlock {
     std::vector<std::pair<std::string, int>> listenDirectives;
     std::string host;
@@ -16,7 +15,6 @@ struct ServerBlock {
     const LocationBlock* getLocation(const std::string& path) const;
 };
 
-// ServerBlock implementation
 inline ServerBlock::ServerBlock() 
     : host("0.0.0.0"), clientMaxBodySize(1024 * 1024) {
 }

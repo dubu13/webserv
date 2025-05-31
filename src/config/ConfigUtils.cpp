@@ -62,12 +62,10 @@ std::pair<std::string, std::string> parseDirective(const std::string& line) {
         return {"", ""};
     }
     
-    // Get the rest of the line as the value
     std::string value;
     std::getline(iss, value);
     value = trim(value);
-    
-    // Remove trailing semicolon
+
     if (!value.empty() && value.back() == ';') {
         value.pop_back();
         value = trim(value);
@@ -119,7 +117,6 @@ std::pair<std::string, int> parseListenDirective(const std::string& value) {
     
     size_t colonPos = token.find(':');
     if (colonPos == std::string::npos) {
-        // Only port specified
         try {
             int port = std::stoi(token);
             if (port < 1 || port > 65535) {
@@ -156,7 +153,6 @@ std::map<int, std::string> parseErrorPages(const std::string& value) {
     std::vector<std::string> codes;
     std::string token;
     
-    // Read all tokens
     while (iss >> token) {
         codes.push_back(token);
     }
@@ -214,4 +210,5 @@ bool isValidServerName(const std::string& name) {
 bool isValidPath(const std::string& path) {
     return !path.empty() && (path[0] == '/' || path[0] == '.');
 }
+
 }

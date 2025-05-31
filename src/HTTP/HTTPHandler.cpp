@@ -1,5 +1,6 @@
 #include "HTTP/HTTPHandler.hpp"
 #include "utils/FileUtils.hpp"
+#include "utils/HttpUtils.hpp"
 #include "utils/Logger.hpp"
 #include <iostream>
 #include <ctime>
@@ -33,7 +34,7 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
     if (!HTTP::parseRequest(requestData, request)) {
       Logger::warn("Failed to parse HTTP request - malformed request");
       Logger::debugf("Raw request data: %s", requestData.substr(0, std::min(requestData.size(), size_t(200))).c_str());
-      return HTTP::createErrorResponse(HTTP::StatusCode::BAD_REQUEST);
+      return HttpUtils::createErrorResponse(HTTP::StatusCode::BAD_REQUEST);
     }
     
     std::string uri = request.requestLine.uri;
@@ -96,7 +97,7 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
 
       if (location->allowedMethods.find(methodStr) == location->allowedMethods.end()) {
         Logger::warnf("Method %s not allowed for URI %s", methodStr.c_str(), uri.c_str());
-        return HTTP::createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
+        return HttpUtils::createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
       }
     }
 
@@ -116,7 +117,7 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
         Logger::debugf("CGI response length: %zu bytes", cgiResponse.length());
         return !cgiResponse.empty()
                    ? cgiResponse
-                   : HTTP::createErrorResponse(
+                   : HttpUtils::createErrorResponse(
                          HTTP::StatusCode::INTERNAL_SERVER_ERROR);
       } else {
         Logger::debugf("Reading static file from: %s", filePath.c_str());
@@ -134,18 +135,18 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
                 _root_directory, errorPageIt->second, fileStatus);
             if (fileStatus == HTTP::StatusCode::OK) {
               Logger::debug("Custom error page loaded successfully");
-              return HTTP::createFileResponse(status, customContent,
+              return HttpUtils::createFileResponse(status, customContent,
                                               "text/html");
             } else {
               Logger::debug("Custom error page failed to load, using default");
             }
           }
-          return HTTP::createErrorResponse(status);
+          return HttpUtils::createErrorResponse(status);
         }
         
         std::string mimeType = HTTP::getMimeType(filePath);
         Logger::debugf("Serving file with MIME type: %s", mimeType.c_str());
-        return HTTP::createFileResponse(status, content, mimeType);
+        return HttpUtils::createFileResponse(status, content, mimeType);
       }
       break;
     case HTTP::Method::POST:
@@ -160,7 +161,7 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
         Logger::debugf("CGI POST response length: %zu bytes", cgiResponse.length());
         return !cgiResponse.empty()
                    ? cgiResponse
-                   : HTTP::createErrorResponse(
+                   : HttpUtils::createErrorResponse(
                          HTTP::StatusCode::INTERNAL_SERVER_ERROR);
       } else {
         Logger::debug("Processing file upload");
@@ -182,7 +183,7 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
         }
 
         Logger::debugf("Upload result: success=%s, status=%d", success ? "true" : "false", static_cast<int>(status));
-        return HTTP::createSimpleResponse(
+        return HttpUtils::createSimpleResponse(
             status, success ? "File uploaded successfully" : "Upload failed");
       }
     case HTTP::Method::DELETE: {
@@ -190,7 +191,7 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
       HTTP::StatusCode status;
       bool success = FileUtils::deleteFile(effectiveRoot, effectiveUri, status);
       Logger::debugf("Delete result: success=%s, status=%d", success ? "true" : "false", static_cast<int>(status));
-      return HTTP::createSimpleResponse(status, success ? "File deleted"
+      return HttpUtils::createSimpleResponse(status, success ? "File deleted"
                                                         : "Delete failed");
     }
     case HTTP::Method::HEAD:
@@ -198,11 +199,11 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
     case HTTP::Method::PATCH:
     default:
       Logger::warnf("Method not allowed: %s", methodStr.c_str());
-      return HTTP::createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
+      return HttpUtils::createErrorResponse(HTTP::StatusCode::METHOD_NOT_ALLOWED);
     }
   } catch (const std::exception &e) {
     Logger::errorf("HTTPHandler error: %s", e.what());
-    return HTTP::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
+    return HttpUtils::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR);
   }
 }
 void HTTPHandler::setRootDirectory(const std::string &root) {
