@@ -46,8 +46,8 @@ namespace PathResolver {
     inline std::string resolveIndexFile(const std::string& dirPath, const LocationBlock* location) {
         if (location && !location->index.empty()) {
             std::string indexPath = dirPath + "/" + location->index;
-            size_t fileSize;
-            if (FileUtils::fileExists(dirPath, "/" + location->index, fileSize)) {
+            auto fileSize = FileUtils::fileExists(dirPath, "/" + location->index);
+            if (fileSize.has_value()) {
                 return indexPath;
             }
         }

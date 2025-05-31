@@ -73,6 +73,42 @@ std::string HTTPHandler::handleRequest(const std::string &requestData) {
       Logger::warn("No server configuration available for location lookup");
     }
     
+    // Check for redirections first (highest priority)
+    if (location && !location->redirection.empty()) {
+      Logger::infof("Redirect found for URI %s: %s", uri.c_str(), location->redirection.c_str());
+      
+      // Parse redirection string: "301 /new/path" or just "/new/path" (defaults to 301)
+      std::string redirStr = location->redirection;
+      HTTP::StatusCode redirectStatus = HTTP::StatusCode::MOVED_PERMANENTLY; // Default 301
+      std::string redirectLocation;
+      
+      size_t spacePos = redirStr.find(' ');
+      if (spacePos != std::string::npos) {
+        // Format: "301 /new/path"
+        std::string statusStr = redirStr.substr(0, spacePos);
+        redirectLocation = redirStr.substr(spacePos + 1);
+        
+        try {
+          int statusCode = std::stoi(statusStr);
+          if (statusCode == 301) {
+            redirectStatus = HTTP::StatusCode::MOVED_PERMANENTLY;
+          } else if (statusCode == 302) {
+            redirectStatus = HTTP::StatusCode::FOUND;
+          } else {
+            Logger::warnf("Unsupported redirect status code %d, using 301", statusCode);
+          }
+        } catch (const std::exception& e) {
+          Logger::warnf("Invalid redirect status code '%s', using 301: %s", statusStr.c_str(), e.what());
+        }
+      } else {
+        // Format: "/new/path" (default to 301)
+        redirectLocation = redirStr;
+      }
+      
+      Logger::infof("Redirecting %s to %s with status %d", uri.c_str(), redirectLocation.c_str(), static_cast<int>(redirectStatus));
+      return HttpResponseBuilder::createRedirectResponse(redirectStatus, redirectLocation);
+    }
+    
     // Resolve effective paths
     auto [effectiveRoot, effectiveUri] = HTTP::resolveEffectivePath(uri, _root_directory, location);
     Logger::debugf("Resolved paths - root: %s, uri: %s", effectiveRoot.c_str(), effectiveUri.c_str());

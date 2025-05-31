@@ -41,6 +41,8 @@ static const std::unordered_map<StatusCode, std::string_view> statusToStringMap 
     {StatusCode::OK, "OK"},
     {StatusCode::CREATED, "Created"},
     {StatusCode::NO_CONTENT, "No Content"},
+    {StatusCode::MOVED_PERMANENTLY, "Moved Permanently"},
+    {StatusCode::FOUND, "Found"},
     {StatusCode::BAD_REQUEST, "Bad Request"},
     {StatusCode::FORBIDDEN, "Forbidden"},
     {StatusCode::NOT_FOUND, "Not Found"},

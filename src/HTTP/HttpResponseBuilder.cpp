@@ -84,4 +84,16 @@ std::string createFileResponse(HTTP::StatusCode status, const std::string& conte
     return buildResponse(status, headers, content);
 }
 
+std::string createRedirectResponse(HTTP::StatusCode status, const std::string& location) {
+    Logger::debugf("HttpResponseBuilder::createRedirectResponse - Creating redirect response with status %d to %s", 
+                   static_cast<int>(status), location.c_str());
+    
+    std::map<std::string, std::string> headers;
+    headers["Location"] = location;
+    headers["Content-Type"] = "text/html";
+    headers["Content-Length"] = "0";
+    
+    return buildResponse(status, headers, "");
+}
+
 }

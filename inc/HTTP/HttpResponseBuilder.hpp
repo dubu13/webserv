@@ -15,4 +15,5 @@ namespace HttpResponseBuilder {
     std::string createSimpleResponse(HTTP::StatusCode status, const std::string& message);
     std::string createErrorResponse(HTTP::StatusCode status, const std::string& errorMessage = "");
     std::string createFileResponse(HTTP::StatusCode status, const std::string& content, const std::string& contentType);
+    std::string createRedirectResponse(HTTP::StatusCode status, const std::string& location);
 }
