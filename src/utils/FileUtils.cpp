@@ -7,12 +7,12 @@
 #include <dirent.h>
 #include <algorithm>
 #include <filesystem>
+#include <vector>
 
 namespace FileUtils {
 
 static FileCache fileCache(100);
 
-// Simple helper functions
 static bool validateSecurity(std::string_view uri, HTTP::StatusCode& status) {
     if (!isPathSafe(uri)) {
         Logger::warnf("Security violation: unsafe path detected");
@@ -43,22 +43,19 @@ std::string readFile(std::string_view rootDir, std::string_view uri, HTTP::Statu
     const std::string filePath = buildPath(rootDir, uri);
     
     if (!validateSecurity(uri, status)) return "";
-    
-    // Check cache
+
     std::string content, mimeType;
     if (fileCache.getFile(filePath, content, mimeType)) {
         status = HTTP::StatusCode::OK;
         return content;
     }
-    
-    // Check file exists
+
     auto fileStat = getFileStats(filePath);
     if (!fileStat) {
         status = HTTP::StatusCode::NOT_FOUND;
         return "";
     }
-    
-    // Handle directories
+
     if (S_ISDIR(fileStat->st_mode)) {
         auto indexUri = findIndexFile(uri, filePath);
         if (indexUri) {
@@ -67,8 +64,7 @@ std::string readFile(std::string_view rootDir, std::string_view uri, HTTP::Statu
         status = HTTP::StatusCode::FORBIDDEN;
         return "";
     }
-    
-    // Read file
+
     std::ifstream file(filePath, std::ios::binary);
     if (!file.is_open() || access(filePath.c_str(), R_OK) != 0) {
         status = HTTP::StatusCode::FORBIDDEN;

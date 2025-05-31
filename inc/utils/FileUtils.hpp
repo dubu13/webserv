@@ -1,6 +1,8 @@
 #pragma once
 #include "HTTP/HTTPTypes.hpp"
 #include <string>
+#include <string_view>
+#include <optional>
 #include <unordered_map>
 #include <chrono>
 
@@ -16,23 +18,23 @@ namespace FileUtils {
   void setCacheMaxSize(size_t maxSize);
   
   // Existing functions
-  std::string readFile(const std::string &rootDir, const std::string &uri, HTTP::StatusCode &status);
-  bool writeFile(const std::string &rootDir, const std::string &uri, const std::string &content, HTTP::StatusCode &status);
-  bool deleteFile(const std::string &rootDir, const std::string &uri, HTTP::StatusCode &status);
-  bool fileExists(const std::string &rootDir, const std::string &uri, size_t &size);
+  std::string readFile(std::string_view rootDir, std::string_view uri, HTTP::StatusCode &status);
+  bool writeFile(std::string_view rootDir, std::string_view uri, std::string_view content, HTTP::StatusCode &status);
+  bool deleteFile(std::string_view rootDir, std::string_view uri, HTTP::StatusCode &status);
+  std::optional<size_t> fileExists(std::string_view rootDir, std::string_view uri);
   
   // Directory utilities
-  bool isDirectory(const std::string &path);
-  std::string generateDirectoryListing(const std::string &dirPath, const std::string &uri);
+  bool isDirectory(std::string_view path);
+  std::string generateDirectoryListing(std::string_view dirPath, std::string_view uri);
   
   // Path utilities
-  std::string extractQueryParams(const std::string &uri);
-  std::string cleanUri(const std::string &uri);
+  std::string extractQueryParams(std::string_view uri);
+  std::string cleanUri(std::string_view uri);
   
-  std::string buildPath(const std::string &root, const std::string &path);
-  bool isPathSafe(const std::string &path);
-  std::string sanitizePath(const std::string &path);
+  std::string buildPath(std::string_view root, std::string_view path);
+  bool isPathSafe(std::string_view path);
+  std::string sanitizePath(std::string_view path);
   
-  std::string readFileContent(const std::string &filePath);
-  bool writeFileContent(const std::string &filePath, const std::string &content);
+  std::optional<std::string> readFileContent(std::string_view filePath);
+  bool writeFileContent(std::string_view filePath, std::string_view content);
 }
