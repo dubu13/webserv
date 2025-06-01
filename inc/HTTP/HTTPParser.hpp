@@ -28,6 +28,9 @@ namespace HTTP {
         bool parseRequest(const std::string& data, Request& request);
         RequestLine parseRequestLine(std::string_view line);
         
+        // HTTP request validation
+        bool validateHttpRequest(const Request& request);
+        
         // String parsing utilities (high performance with string_view)
         std::string_view trimWhitespace(std::string_view str);
         std::pair<std::string_view, std::string_view> splitFirst(std::string_view str, char delimiter);
