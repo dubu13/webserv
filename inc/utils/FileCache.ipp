@@ -29,11 +29,14 @@ public:
         return false;
     }
     
-    // Inline cache storage
+    // Inline cache storage with LRU eviction
     void cacheFile(const std::string& path, const std::string& content, const std::string& mimeType) {
-        // Simple eviction: if we're at max capacity, clear the cache
-        if (cache.size() >= maxEntries) {
-            cache.clear();
+        // If at max capacity, remove oldest entry (LRU approximation)
+        if (cache.size() >= maxEntries && cache.find(path) == cache.end()) {
+            // Remove first entry as approximation of LRU
+            // In a full implementation, we'd track access order
+            auto it = cache.begin();
+            cache.erase(it);
         }
         
         cache[path] = {content, mimeType};
