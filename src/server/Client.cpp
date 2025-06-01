@@ -21,15 +21,20 @@ Client::Client(Client&& other) noexcept
 
 Client& Client::operator=(Client&& other) noexcept {
     if (this != &other) {
-        _socket = std::move(other._socket);
-        _address = other._address;
-        _incomingData = std::move(other._incomingData);
-        _outgoingData = std::move(other._outgoingData);
-        _keepAlive = other._keepAlive;
-        _lastActivity = other._lastActivity;
-        Logger::debugf("Client move-assigned from fd: %d to fd: %d", other._socket.get(), _socket.get());
+        Client temp(std::move(other));
+        swap(temp);
+        Logger::debugf("Client move-assigned using swap idiom to fd: %d", _socket.get());
     }
     return *this;
+}
+
+void Client::swap(Client& other) noexcept {
+    std::swap(_socket, other._socket);
+    std::swap(_address, other._address);
+    std::swap(_incomingData, other._incomingData);
+    std::swap(_outgoingData, other._outgoingData);
+    std::swap(_keepAlive, other._keepAlive);
+    std::swap(_lastActivity, other._lastActivity);
 }
 
 std::string Client::getIpAddress() const {
@@ -41,7 +46,7 @@ std::string Client::getIpAddress() const {
     return std::string(ip);
 }
 
-bool Client::hasTimedOut(time_t timeout) const {
+bool Client::hasTimedOut(time_t timeout) const noexcept {
     return (time(nullptr) - _lastActivity) > timeout;
 }
 

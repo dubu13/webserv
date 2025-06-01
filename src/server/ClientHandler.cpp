@@ -6,6 +6,8 @@
 #include <cstring>
 #include <iostream>
 #include <unistd.h>
+#include <vector>
+#include <algorithm>
 
 ClientHandler::ClientHandler(Server &server, const std::string &webRoot, time_t timeout)
     : _server(server), _httpHandler(webRoot, &server.getConfig()), _timeout(timeout) {}
@@ -41,19 +43,74 @@ bool ClientHandler::hasCompleteRequest(const std::string &data) const {
 }
 
 ssize_t ClientHandler::readClientData(int fd, server::Client &client, size_t maxSize) {
-  char buffer[8192];
-  ssize_t bytesRead = recv(fd, buffer, sizeof(buffer), MSG_DONTWAIT);
+  // Security and performance limits
+  constexpr size_t MAX_REQUEST_SIZE = 1024 * 1024;  // 1MB total request
+  constexpr size_t MAX_HEADER_SIZE = 8192;          // 8KB headers only
+  constexpr size_t MAX_URI_LENGTH = 2048;           // 2KB URI limit
+  
+  // Use thread-local static buffer to avoid repeated allocations
+  constexpr size_t BUFFER_SIZE = 8192;
+  static thread_local std::vector<char> buffer(BUFFER_SIZE);
+  
+  // Enforce global request size limit
+  std::string& incomingData = client.getIncomingData();
+  if (incomingData.size() >= MAX_REQUEST_SIZE) {
+    Logger::warnf("Client fd=%d exceeded maximum request size (%zu bytes)", fd, MAX_REQUEST_SIZE);
+    return -2; // Force disconnect
+  }
+  
+  // Calculate remaining space
+  size_t space1 = maxSize - incomingData.size();
+  size_t space2 = MAX_REQUEST_SIZE - incomingData.size();
+  size_t space3 = buffer.size();
+  size_t remainingSpace = std::min(space1, std::min(space2, space3));
+  
+  if (remainingSpace == 0) {
+    Logger::warnf("Client fd=%d: no remaining space for data", fd);
+    return -2;
+  }
+  
+  ssize_t bytesRead = recv(fd, buffer.data(), remainingSpace, MSG_DONTWAIT);
   
   Logger::debugf("recv() on fd %d returned %zd bytes", fd, bytesRead);
   
   if (bytesRead > 0) {
-    std::string& incomingData = client.getIncomingData();
-    if (incomingData.length() + bytesRead > maxSize) {
-      Logger::warnf("Payload too large: current=%zu, incoming=%zd, max=%zu", 
-                    incomingData.length(), bytesRead, maxSize);
-      return -2;
+    // Check if we have headers and validate their size
+    auto headerEnd = incomingData.find("\r\n\r\n");
+    if (headerEnd == std::string::npos) {
+      // Still receiving headers - check header size limit
+      if (incomingData.size() + bytesRead > MAX_HEADER_SIZE) {
+        Logger::warnf("Client fd=%d exceeded maximum header size (%zu bytes)", fd, MAX_HEADER_SIZE);
+        return -2;
+      }
+    } else {
+      // Headers already received - check if we're in the body
+      size_t headerSize = headerEnd + 4;
+      if (headerSize > MAX_HEADER_SIZE) {
+        Logger::warnf("Client fd=%d has headers exceeding size limit", fd);
+        return -2;
+      }
+      
+      // Extract and validate URI length from request line
+      auto firstLine = incomingData.substr(0, incomingData.find("\r\n"));
+      auto spacePos1 = firstLine.find(' ');
+      auto spacePos2 = firstLine.find(' ', spacePos1 + 1);
+      if (spacePos1 != std::string::npos && spacePos2 != std::string::npos) {
+        size_t uriLength = spacePos2 - spacePos1 - 1;
+        if (uriLength > MAX_URI_LENGTH) {
+          Logger::warnf("Client fd=%d has URI exceeding length limit (%zu chars)", fd, uriLength);
+          return -2;
+        }
+      }
     }
-    incomingData.append(buffer, bytesRead);
+    
+    // Reserve capacity to avoid frequent reallocations
+    if (incomingData.capacity() < incomingData.size() + bytesRead) {
+      // Reserve extra space to minimize future reallocations
+      incomingData.reserve(incomingData.size() + BUFFER_SIZE);
+    }
+    
+    incomingData.append(buffer.data(), bytesRead);
     Logger::debugf("Appended %zd bytes to client data (total: %zu bytes)", bytesRead, incomingData.length());
   } else if (bytesRead == 0) {
     Logger::debugf("Connection closed by client (fd: %d)", fd);
@@ -255,36 +312,40 @@ void ClientHandler::sendError(int fd, int status) {
 void ClientHandler::checkTimeouts() {
   Logger::debugf("ClientHandler::checkTimeouts - Checking timeouts for %zu clients", _clients.size());
   
-  std::vector<int> timedOut;
   time_t currentTime = time(NULL);
   size_t activeConnections = 0;
+  size_t timedOutCount = 0;
   
-  for (const auto &pair : _clients) {
-    const server::Client &client = pair.second;
+  // Use iterator for safe removal during iteration
+  auto it = _clients.begin();
+  while (it != _clients.end()) {
+    const server::Client &client = it->second;
+    int fd = it->first;
     time_t idleTime = currentTime - client.getLastActivity();
     time_t timeoutLimit = _timeout;
     
     if (client.hasDataToWrite()) {
       timeoutLimit = _timeout / 2;
       activeConnections++;
-      Logger::debugf("Client fd %d has pending data, using reduced timeout: %ld seconds", pair.first, timeoutLimit);
+      Logger::debugf("Client fd %d has pending data, using reduced timeout: %ld seconds", fd, timeoutLimit);
     }
     
     if (idleTime > timeoutLimit) {
       Logger::warnf("Client fd %d timed out (idle: %ld seconds, limit: %ld seconds)", 
-                    pair.first, idleTime, timeoutLimit);
-      timedOut.push_back(pair.first);
+                    fd, idleTime, timeoutLimit);
+      Logger::infof("Removing timed out client (fd: %d)", fd);
+      
+      // Remove immediately to prevent race conditions
+      _server.getPoller().removeFd(fd);
+      it = _clients.erase(it);  // erase returns iterator to next element
+      timedOutCount++;
     } else {
       Logger::debugf("Client fd %d is active (idle: %ld seconds < limit: %ld seconds)", 
-                     pair.first, idleTime, timeoutLimit);
+                     fd, idleTime, timeoutLimit);
+      ++it;
     }
   }
   
   Logger::debugf("Timeout check complete: %zu clients checked, %zu active with pending data, %zu timed out", 
-                 _clients.size(), activeConnections, timedOut.size());
-  
-  for (int fd : timedOut) {
-    Logger::infof("Removing timed out client (fd: %d)", fd);
-    removeClient(fd);
-  }
+                 _clients.size() + timedOutCount, activeConnections, timedOutCount);
 }
