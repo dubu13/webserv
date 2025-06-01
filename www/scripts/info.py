@@ -4,7 +4,6 @@
 import os
 import sys
 import datetime
-import cgi
 
 # Print HTTP headers
 print("Content-Type: text/html")

@@ -1,9 +1,11 @@
 #include "CGIHandler.hpp"
+#include "utils/Logger.hpp"
+#include "HTTP/HTTPResponseBuilder.hpp"
 
 CGIHandler::CGIHandler(const std::string &root) : _root_directory(root) {
   Logger::infof("CGIHandler initialized with root directory: %s", root.c_str());
   registerHandler(".php", "/usr/bin/php");
-  registerHandler(".py", "/usr/bin/python");
+  registerHandler(".py", "/usr/bin/python3");
   registerHandler(".pl", "/usr/bin/perl");
   Logger::debugf("Registered %zu CGI handlers", _cgi_handlers.size());
 }
@@ -39,14 +41,14 @@ std::string CGIHandler::executeScript(const std::string &script_path,
 
   int pipefd[2];
   if (pipe(pipefd) == -1)
-    return HTTP::createSimpleResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR, "Failed to create pipe");
+    return HTTP::ResponseBuilder::createSimpleResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR, "Failed to create pipe");
   
   int input_pipe[2] = {-1, -1};
   if (request.requestLine.method == HTTP::Method::POST && !request.body.empty()) {
     if (pipe(input_pipe) == -1) {
       close(pipefd[0]);
       close(pipefd[1]);
-      return HTTP::createSimpleResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR, "Failed to create input pipe");
+      return HTTP::ResponseBuilder::createSimpleResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR, "Failed to create input pipe");
     }
   }
 
@@ -59,7 +61,7 @@ std::string CGIHandler::executeScript(const std::string &script_path,
       close(input_pipe[0]);
       close(input_pipe[1]);
     }
-    return HTTP::createSimpleResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR, "Fork failed");
+    return HTTP::ResponseBuilder::createSimpleResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR, "Fork failed");
   }
   // child process
   if (pid == 0) {
@@ -120,17 +122,26 @@ std::string CGIHandler::executeScript(const std::string &script_path,
   waitpid(pid, &status, 0);
 
   if (WIFEXITED(status) && WEXITSTATUS(status) != 0)
-    return HTTP::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR, "CGI script execution failed with status: " + std::to_string(WEXITSTATUS(status)));
+    return HTTP::ResponseBuilder::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR, "CGI script execution failed with status: " + std::to_string(WEXITSTATUS(status)));
 
   return parseCGIOutput(output.str());
 }
 
 std::string CGIHandler::parseCGIOutput(const std::string& output){
   size_t header_end = output.find("\r\n\r\n");
+  size_t header_separator_len = 4;
+  
+  // If Windows line endings not found, try Unix line endings
+  if (header_end == std::string::npos) {
+    header_end = output.find("\n\n");
+    header_separator_len = 2;
+  }
+  
   if (header_end == std::string::npos)
-    return HTTP::createSimpleResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR, "CGI output doesn't have valid headers");
+    return HTTP::ResponseBuilder::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR, "CGI output doesn't have valid headers");
+  
   std::string header_section = output.substr(0, header_end);
-  std::string body = output.substr(header_end + 4);
+  std::string body = output.substr(header_end + header_separator_len);
 
   std::map<std::string, std::string> headers;
   std::istringstream header_stream(header_section);
@@ -152,7 +163,7 @@ std::string CGIHandler::parseCGIOutput(const std::string& output){
           int status_num = std::stoi(value.substr(0, 3));
           status_code = static_cast<HTTP::StatusCode>(status_num);
         } catch (...) {
-          return HTTP::createSimpleResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR, "Invalid status code in CGI output");
+          return HTTP::ResponseBuilder::createErrorResponse(HTTP::StatusCode::INTERNAL_SERVER_ERROR, "Invalid status code in CGI output");
         }
       }
       else
@@ -161,7 +172,13 @@ std::string CGIHandler::parseCGIOutput(const std::string& output){
   }
   if (headers.find("Content-Type") == headers.end())
     headers["Content-Type"] = HTTP::getMimeType(body);
-  return HTTP::buildResponse(status_code, headers, body, true);
+  
+  HTTP::ResponseBuilder builder(status_code);
+  for (const auto& header : headers) {
+    builder.setHeader(header.first, header.second);
+  }
+  builder.setBody(body);
+  return builder.build();
 }
 
 void CGIHandler::registerHandler(const std::string &extension, const std::string &handlerPath) {
