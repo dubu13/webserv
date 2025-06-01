@@ -5,10 +5,11 @@
 #include <stdexcept>
 #include <vector>
 #include <chrono>
+
 class Poller {
 private:
   std::vector<struct pollfd> _poll_fds;
-  static const int _timeout = 1000;
+  static const inline int _timeout = 1000;  // Add 'inline' here
 public:
   void addFd(int fd, short events);
   void removeFd(int fd);

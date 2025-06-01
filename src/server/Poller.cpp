@@ -1,6 +1,7 @@
 #include "Poller.hpp"
 #include "utils/Logger.hpp"
 #include <algorithm>
+#include <atomic>
 
 void Poller::addFd(int fd, short events) {
   Logger::debugf("Adding fd %d to poller with events 0x%x", fd, events);
@@ -55,15 +56,23 @@ size_t Poller::getFdCount() const {
 }
 
 std::vector<struct pollfd> Poller::poll() {
+  extern std::atomic<bool> g_running; //
+
   std::vector<struct pollfd> active_fds;
   if (_poll_fds.empty()) {
     Logger::debug("Poll called with no file descriptors");
     return active_fds;
   }
+
+  int effective_timeout = g_running.load() ? _timeout : 100; //
   
   Logger::debugf("Calling poll() on %zu file descriptors with timeout %d ms", _poll_fds.size(), _timeout);
-  int ret = ::poll(_poll_fds.data(), _poll_fds.size(), _timeout);
+  int ret = ::poll(_poll_fds.data(), _poll_fds.size(), effective_timeout);
   
+  if (!g_running.load()) { //
+    Logger::debug("Poll interrupted - server is shutting down");
+    return active_fds;
+  }
   if (ret < 0) {
     if (errno == EINTR) {
       Logger::debug("Poll interrupted by signal");
@@ -97,7 +106,9 @@ std::vector<struct pollfd> Poller::poll() {
   
   return active_fds;
 }
+
 bool Poller::hasActivity(const struct pollfd &pfd, short events) const {
   return (pfd.revents & events) == events;
 }
+
 bool Poller::empty() const { return _poll_fds.empty(); }

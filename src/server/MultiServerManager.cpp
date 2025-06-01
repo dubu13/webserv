@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <unordered_set>
+#include <chrono>
 
 extern std::atomic<bool> g_running;
 
@@ -129,18 +130,31 @@ void MultiServerManager::stopAll() {
 
 void MultiServerManager::joinAll() {
     Logger::debug("Joining all server threads...");
+
+    const int timeoutMs = 3000;
+    auto startTime = std::chrono::steady_clock::now();
     
     for (auto& thread : _serverThreads) {
         if (thread.joinable()) {
             try {
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - startTime).count();
+                if (elapsed >= timeoutMs) {
+                    Logger::warn("Joining server thread timed out, forcefully detaching");
+                    thread.detach();
+                    continue;
+                }
                 thread.join();
                 Logger::debug("Server thread joined successfully");
             } catch (const std::exception& e) {
                 Logger::errorf("Error joining server thread: %s", e.what());
+                if (thread.joinable()) {
+                    thread.detach(); // Detach if join fails
+                    Logger::warn("Forcefully detached server thread due to error");
+                }
             }
         }
     }
-    
     _serverThreads.clear();
     Logger::debug("All server threads joined");
 }
