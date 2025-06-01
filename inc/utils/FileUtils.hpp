@@ -5,6 +5,7 @@
 #include <optional>
 #include <unordered_map>
 #include <chrono>
+#include <functional>
 
 namespace FileUtils {
   // Simple file cache for performance

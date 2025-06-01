@@ -9,6 +9,8 @@
 #include <filesystem>
 #include <vector>
 #include <cstdio>
+#include <fcntl.h>
+#include <cerrno>
 
 namespace FileUtils {
 
@@ -89,13 +91,30 @@ std::string readFile(std::string_view rootDir, std::string_view uri, HTTP::Statu
         return "";
     }
 
-    std::ifstream file(filePath, std::ios::binary);
-    if (!file.is_open() || access(filePath.c_str(), R_OK) != 0) {
+    // Use non-blocking file operations instead of std::ifstream
+    int fd = open(filePath.c_str(), O_RDONLY | O_NONBLOCK);
+    if (fd == -1 || access(filePath.c_str(), R_OK) != 0) {
+        if (fd != -1) close(fd);
         status = HTTP::StatusCode::FORBIDDEN;
         return "";
     }
     
-    content = std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    // Read file in chunks using non-blocking I/O
+    content.clear();
+    content.reserve(fileStat->st_size);
+    
+    char buffer[4096];
+    ssize_t bytesRead;
+    while ((bytesRead = read(fd, buffer, sizeof(buffer))) > 0) {
+        content.append(buffer, bytesRead);
+    }
+    
+    close(fd);
+    
+    if (bytesRead == -1 && errno != EAGAIN && errno != EWOULDBLOCK) {
+        status = HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+        return "";
+    }
     fileCache.cacheFile(filePath, content, "text/html");
     status = HTTP::StatusCode::OK;
     return content;
