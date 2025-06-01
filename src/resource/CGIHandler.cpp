@@ -1,6 +1,6 @@
 #include "CGIHandler.hpp"
 #include "HTTP/HTTPTypes.hpp"
-#include "HTTP/HttpResponseBuilder.hpp"
+#include "HTTP/HTTPResponseBuilder.hpp"
 #include "utils/Logger.hpp"
 #include <iostream>
 
@@ -13,7 +13,7 @@ CGIHandler::CGIHandler(const std::string &root) : _root_directory(root) {
 }
 CGIHandler::~CGIHandler() {}
 std::string CGIHandler::executeCGI(const std::string &uri,
-                                   const HttpParser::Request &request) {
+                                   const HTTP::Request &request) {
   std::string filePath = _root_directory + uri;
   Logger::debugf("CGI execution requested for: %s", filePath.c_str());
   
@@ -58,7 +58,7 @@ void CGIHandler::setRootDirectory(const std::string &root) {
 }
 std::string CGIHandler::executeScript(const std::string &script_path,
                                       const std::string &handler_path,
-                                      const HttpParser::Request &request) {
+                                      const HTTP::Request &request) {
   Logger::warnf("CGI execution not yet implemented for script: %s with handler: %s", 
                 script_path.c_str(), handler_path.c_str());
   Logger::debugf("Request method: %s, URI: %s, Body length: %zu", 
@@ -69,6 +69,6 @@ std::string CGIHandler::executeScript(const std::string &script_path,
   // TODO: Implement actual CGI execution using fork/execve as per subject requirements
   // The subject specifically mentions fork can only be used for CGI
   
-  return HttpResponseBuilder::createSimpleResponse(HTTP::StatusCode::OK,
+  return HTTP::ResponseBuilder::createSimpleResponse(HTTP::StatusCode::OK,
                                     "CGI execution not implemented yet");
 }

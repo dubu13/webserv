@@ -1,6 +1,7 @@
 #include "config/Config.hpp"
 #include "config/ConfigHandlers.ipp"
 #include "utils/Logger.hpp"
+#include "config/ConfigUtils.hpp"
 #include <fstream>
 #include <sstream>
 
@@ -36,8 +37,10 @@ void Config::parseFromFile() {
         parseServerBlock(serverBlocks[i], server);
         
         // Add server with each listen directive as key
+        // Use server.host if set, otherwise fall back to the host from listen directive
         for (const auto& listen : server.listenDirectives) {
-            std::string key = listen.first + ":" + std::to_string(listen.second);
+            std::string hostToUse = server.host.empty() ? listen.first : server.host;
+            std::string key = hostToUse + ":" + std::to_string(listen.second);
             _servers[key] = server;
             Logger::infof("Added server configuration for %s", key.c_str());
         }

@@ -1,4 +1,6 @@
 #pragma once
+#include <string>
+#include <set>
 
 struct LocationBlock {
     std::string path;
@@ -16,12 +18,3 @@ struct LocationBlock {
     LocationBlock();
     bool matchesPath(const std::string& requestPath) const;
 };
-
-inline LocationBlock::LocationBlock() 
-    : autoindex(false), uploadEnable(false), clientMaxBodySize(0) {
-    allowedMethods.insert("GET");
-}
-
-inline bool LocationBlock::matchesPath(const std::string& requestPath) const {
-    return requestPath.find(path) == 0;
-}
