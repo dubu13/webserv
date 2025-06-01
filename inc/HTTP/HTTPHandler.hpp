@@ -13,6 +13,7 @@ private:
   CGIHandler _cgiHandler;
   const ServerBlock *_config;
   
+  void initializeCGIHandlers();
   // Helper methods
   std::string handleCgiRequest(const HTTP::Request& request, const std::string& effectiveRoot, const std::string& effectiveUri);
   std::string createErrorResponse(HTTP::StatusCode status, const std::string& message = "");

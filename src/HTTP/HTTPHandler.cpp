@@ -21,9 +21,23 @@ HTTPHandler::HTTPHandler(const std::string& root, const ServerBlock* config)
         _custom_error_pages[HTTP::StatusCode::METHOD_NOT_ALLOWED] = "/errors/405.html";
         _custom_error_pages[HTTP::StatusCode::PAYLOAD_TOO_LARGE] = "/errors/413.html";
     }
+    initializeCGIHandlers();
 }
 
 HTTPHandler::~HTTPHandler() {}
+
+void HTTPHandler::initializeCGIHandlers() {
+    if (!_config)
+        return;
+
+    for (const auto& location : _config->locations) {
+        if (!location.second.cgiExtension.empty() && !location.second.cgiPath.empty()) {
+            _cgiHandler.registerHandler(location.second.cgiExtension, location.second.cgiPath);
+            Logger::infof("Registered CGI handler for extension '%s' at path '%s'",
+                          location.second.cgiExtension.c_str(), location.second.cgiPath.c_str());
+        }
+    }
+}
 
 std::string HTTPHandler::handleRequest(const std::string& requestData) {
     try {
