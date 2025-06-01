@@ -35,6 +35,12 @@ bool parseRequest(const std::string& data, Request& request) {
             request.body = data.substr(bodyStart);
         }
         
+        // Validate the parsed request according to HTTP standards
+        if (!validateHttpRequest(request)) {
+            Logger::warn("HTTP request failed validation");
+            return false;
+        }
+        
         auto connectionIt = request.headers.find("Connection");
         std::string connectionHeader = (connectionIt != request.headers.end()) ? connectionIt->second : "";
         request.keepAlive = (connectionHeader == "keep-alive" || 
@@ -130,6 +136,50 @@ void parseHeaders(std::string_view headerSection, std::map<std::string, std::str
         start = end + 2;
         if (start >= headerSection.length()) break;
     }
+}
+
+bool validateHttpRequest(const Request& request) {
+    if (request.requestLine.version != "HTTP/1.1" && 
+        request.requestLine.version != "HTTP/1.0") {
+        Logger::warn("Unsupported HTTP version: " + request.requestLine.version);
+        return false;
+    }
+
+    if (request.requestLine.uri.length() > 2048) {
+        Logger::warn("URI too long: " + std::to_string(request.requestLine.uri.length()) + " bytes");
+        return false;
+    }
+
+    if (request.requestLine.version == "HTTP/1.1") {
+        auto host_it = request.headers.find("Host");
+        if (host_it == request.headers.end() || host_it->second.empty()) {
+            Logger::warn("HTTP/1.1 request missing required Host header");
+            return false;
+        }
+    }
+
+    auto cl_it = request.headers.find("Content-Length");
+    if (cl_it != request.headers.end()) {
+        try {
+            size_t content_length = std::stoull(cl_it->second);
+            constexpr size_t MAX_CONTENT_LENGTH = 10 * 1024 * 1024; // 10MB
+            if (content_length > MAX_CONTENT_LENGTH) {
+                Logger::warn("Content-Length too large: " + cl_it->second);
+                return false;
+            }
+        } catch (const std::exception& e) {
+            Logger::warn("Invalid Content-Length format: " + cl_it->second);
+            return false;
+        }
+    }
+    try {
+        HTTP::methodToString(request.requestLine.method);
+    } catch (const std::exception& e) {
+        Logger::warn("Invalid HTTP method in request");
+        return false;
+    }
+    
+    return true;
 }
 
 } // namespace Parser

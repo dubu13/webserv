@@ -35,6 +35,11 @@ void ResponseBuilder::setStandardHeaders() {
     std::stringstream oss;
     oss << std::put_time(std::gmtime(&now), "%a, %d %b %Y %H:%M:%S GMT");
     _headers["Date"] = oss.str();
+    
+    // Add security headers (HTTP compliance and security best practices)
+    _headers["X-Content-Type-Options"] = "nosniff";
+    _headers["X-Frame-Options"] = "DENY";
+    _headers["X-XSS-Protection"] = "1; mode=block";
 }
 
 ResponseBuilder& ResponseBuilder::setStatus(HTTP::StatusCode status) {
