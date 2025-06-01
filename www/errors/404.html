@@ -2,14 +2,40 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>404 Not Found</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 Not Found - WebServ</title>
+    <link rel="icon" type="image/x-icon" href="/assets/images/favicon.ico">
+    <link rel="icon" type="image/svg+xml" href="/assets/images/favicon.svg">
+    <link rel="stylesheet" href="/assets/css/styles.css">
     <style>
-        body { font-family: sans-serif; text-align: center; margin-top: 20%; }
-        h1 { font-size: 3em; color: #c0392b; }
+        h1 { color: #c0392b; }
+        .error-code { font-size: 4rem; font-weight: bold; color: #c0392b; margin-bottom: 0.5rem; }
+        .btn { 
+            background-color: #3498db; 
+            color: white; 
+            padding: 10px 20px; 
+            text-decoration: none; 
+            border-radius: 5px; 
+            display: inline-block;
+            transition: background-color 0.3s;
+        }
+        .btn:hover { 
+            background-color: #2980b9; 
+            color: white;
+        }
     </style>
 </head>
 <body>
-    <h1>404 Not Found</h1>
-    <p>The resource you’re looking for could not be found.</p>
+    <div class="container">
+        <div class="error-code">404</div>
+        <h1>Page Not Found</h1>
+        <div class="card">
+            <p>The resource you're looking for could not be found on this server.</p>
+            <p>The page may have been moved, deleted, or you may have entered an incorrect URL.</p>
+            <div style="margin-top: 20px;">
+                <a href="/" class="btn">← Return to Homepage</a>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

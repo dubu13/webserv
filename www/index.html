@@ -3,16 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebServ CSS and JavaScript Test</title>
-    <link rel="stylesheet" href="/styles.css">
-    <script src="/script.js"></script>
+    <title>WebServ Test Page</title>
+    <link rel="icon" type="image/x-icon" href="/assets/images/favicon.ico">
+    <link rel="icon" type="image/svg+xml" href="/assets/images/favicon.svg">
+    <link rel="stylesheet" href="/assets/css/styles.css">
+    <script src="/assets/js/script.js" defer></script>
 </head>
 <body>
     <div class="container">
-        <h1>WebServ is working!</h1>
-        <p>This page demonstrates that WebServ can serve HTML, CSS, and JavaScript files correctly.</p>
-        <p>The styling on this page comes from <strong>styles.css</strong>, and the dynamic time display below is powered by <strong>script.js</strong>.</p>
-        <p><em>Hint: Try clicking on the heading above!</em></p>
+        <h1>WebServ Test Page</h1>
+        <div class="card">
+            <h2>Feature Tests</h2>
+            <ul>
+                <li><a href="/browse/">Directory Listing Test</a></li>
+                <li><a href="/upload_form.html">File Upload Test</a></li>
+                <li><a href="/scripts/info.py">Python CGI Test</a></li>
+                <li><a href="/scripts/data_viz.py">Data Visualization CGI Test</a></li>
+                <li><a href="/redirect">Redirection Test</a></li>
+                <li><a href="/notfound">404 Error Page Test</a></li>
+            </ul>
+        </div>
+        <div class="card">
+            <h2>Server Info</h2>
+            <p>Time: <span id="current-time">Loading...</span></p>
+        </div>
     </div>
 </body>
 </html>

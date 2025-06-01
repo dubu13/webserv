@@ -1,9 +1,11 @@
 #include "CGIHandler.hpp"
 
 CGIHandler::CGIHandler(const std::string &root) : _root_directory(root) {
+  Logger::infof("CGIHandler initialized with root directory: %s", root.c_str());
   registerHandler(".php", "/usr/bin/php");
   registerHandler(".py", "/usr/bin/python");
   registerHandler(".pl", "/usr/bin/perl");
+  Logger::debugf("Registered %zu CGI handlers", _cgi_handlers.size());
 }
 
 CGIHandler::~CGIHandler() {}
@@ -170,4 +172,3 @@ void CGIHandler::registerHandler(const std::string &extension, const std::string
 void CGIHandler::setRootDirectory(const std::string &root) {
   _root_directory = root;
 }
-

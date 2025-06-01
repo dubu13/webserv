@@ -1,5 +1,6 @@
 #pragma once
-#include "HTTP/HTTP.hpp"
+#include "HTTP/HTTPTypes.ipp"
+#include "HTTP/HTTPParser.hpp"
 #include <map>
 #include <string>
 #include <unistd.h>

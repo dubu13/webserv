@@ -1,6 +1,7 @@
 #pragma once
-#include "HTTP/HTTP.hpp"
-#include "config/ServerConfig.hpp"
+#include "HTTP/HTTPTypes.ipp"
+#include "HTTP/HTTPParser.hpp"
+#include "config/Config.hpp"
 #include "resource/CGIHandler.hpp"
 #include "utils/FileUtils.hpp"
 #include <map>
@@ -10,10 +11,20 @@ private:
   std::string _root_directory;
   std::map<HTTP::StatusCode, std::string> _custom_error_pages;
   CGIHandler _cgiHandler;
-  const ServerConfig *_config;
+  const ServerBlock *_config;
+  
+  // Helper methods
+  std::string handleCgiRequest(const HTTP::Request& request, const std::string& effectiveRoot, const std::string& effectiveUri);
+  std::string createErrorResponse(HTTP::StatusCode status, const std::string& message = "");
+  
+  // Response analysis helpers
+  HTTP::StatusCode extractStatusFromResponse(const std::string& response) const;
+  bool isErrorStatus(HTTP::StatusCode status) const;
+  bool isDefaultErrorResponse(const std::string& response) const;
+  
 public:
   HTTPHandler(const std::string &root = "./www",
-              const ServerConfig *config = nullptr);
+              const ServerBlock *config = nullptr);
   ~HTTPHandler();
   std::string handleRequest(const std::string &requestData);
   void setRootDirectory(const std::string &root);
