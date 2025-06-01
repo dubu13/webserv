@@ -4,6 +4,7 @@
 #include <cctype>
 #include <stdexcept>
 #include <arpa/inet.h>
+#include <string_view>
 
 namespace ConfigUtils {
 
@@ -51,27 +52,60 @@ std::vector<std::string> extractServerBlocks(const std::string& content) {
 }
 
 std::pair<std::string, std::string> parseDirective(const std::string& line) {
-    std::string trimmed = trim(line);
-    if (trimmed.empty() || trimmed[0] == '#') {
+    std::string_view trimmed_view = line;
+    
+    // Trim leading whitespace
+    size_t start = 0;
+    while (start < trimmed_view.length() && std::isspace(trimmed_view[start])) {
+        ++start;
+    }
+    
+    // Trim trailing whitespace
+    size_t end = trimmed_view.length();
+    while (end > start && std::isspace(trimmed_view[end - 1])) {
+        --end;
+    }
+    
+    if (start >= end) {
         return {"", ""};
     }
     
-    std::istringstream iss(trimmed);
-    std::string directive;
-    if (!(iss >> directive)) {
+    trimmed_view = trimmed_view.substr(start, end - start);
+    
+    if (trimmed_view.empty() || trimmed_view[0] == '#') {
         return {"", ""};
     }
     
-    std::string value;
-    std::getline(iss, value);
-    value = trim(value);
-
-    if (!value.empty() && value.back() == ';') {
-        value.pop_back();
-        value = trim(value);
+    // Find first space to separate directive from value
+    size_t space_pos = trimmed_view.find(' ');
+    if (space_pos == std::string_view::npos) {
+        return {std::string(trimmed_view), ""};
     }
     
-    return {directive, value};
+    std::string_view directive_view = trimmed_view.substr(0, space_pos);
+    std::string_view value_view = trimmed_view.substr(space_pos + 1);
+    
+    // Trim value and remove trailing semicolon
+    start = 0;
+    while (start < value_view.length() && std::isspace(value_view[start])) {
+        ++start;
+    }
+    
+    end = value_view.length();
+    while (end > start && std::isspace(value_view[end - 1])) {
+        --end;
+    }
+    
+    if (end > start && value_view[end - 1] == ';') {
+        --end;
+        while (end > start && std::isspace(value_view[end - 1])) {
+            --end;
+        }
+    }
+    
+    value_view = value_view.substr(start, end - start);
+    
+    return {std::string(directive_view), std::string(value_view)};
 }
 
 std::vector<std::string> parseMultiValue(const std::string& value) {

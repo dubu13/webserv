@@ -8,8 +8,32 @@
 #include <algorithm>
 #include <filesystem>
 #include <vector>
+#include <cstdio>
 
 namespace FileUtils {
+
+// URL decode function to prevent encoded path traversal attacks
+std::string urlDecode(std::string_view encoded) {
+    std::string decoded;
+    decoded.reserve(encoded.size());
+    
+    for (size_t i = 0; i < encoded.size(); ++i) {
+        if (encoded[i] == '%' && i + 2 < encoded.size()) {
+            int hex_value;
+            if (std::sscanf(encoded.substr(i + 1, 2).data(), "%2x", &hex_value) == 1) {
+                decoded += static_cast<char>(hex_value);
+                i += 2;
+            } else {
+                decoded += encoded[i];
+            }
+        } else if (encoded[i] == '+') {
+            decoded += ' ';
+        } else {
+            decoded += encoded[i];
+        }
+    }
+    return decoded;
+}
 
 static FileCache fileCache(100);
 
@@ -137,7 +161,30 @@ std::string buildPath(std::string_view root, std::string_view path) {
 }
 
 bool isPathSafe(std::string_view path) {
-    return path.find("..") == std::string_view::npos;
+    // URL decode first to catch encoded attacks
+    std::string decoded = urlDecode(path);
+    
+    // Check for null bytes (prevents null byte injection)
+    if (decoded.find('\0') != std::string::npos) {
+        Logger::warn("Path contains null byte: " + std::string(path));
+        return false;
+    }
+    
+    // Check for directory traversal patterns
+    if (decoded.find("..") != std::string::npos) {
+        Logger::warn("Path contains directory traversal: " + decoded);
+        return false;
+    }
+    
+    // Additional checks for various bypass attempts
+    if (decoded.find("./") != std::string::npos ||
+        decoded.find("\\") != std::string::npos ||
+        decoded.find("~") != std::string::npos) {
+        Logger::warn("Path contains suspicious patterns: " + decoded);
+        return false;
+    }
+    
+    return true;
 }
 
 std::filesystem::path canonicalizePath(std::string_view path) {

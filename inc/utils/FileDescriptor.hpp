@@ -16,11 +16,11 @@ public:
     FileDescriptor(const FileDescriptor&) = delete;
     FileDescriptor& operator=(const FileDescriptor&) = delete;
 
-    bool isValid() const;
-    int get() const;
+    bool isValid() const noexcept;
+    int get() const noexcept;
     void close();
     void reset(int fd = -1, bool owned = true);
-    int release();
+    int release() noexcept;
 
 private:
     int _fd;

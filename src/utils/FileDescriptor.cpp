@@ -28,11 +28,11 @@ FileDescriptor::~FileDescriptor() {
     close(); 
 }
 
-bool FileDescriptor::isValid() const { 
+bool FileDescriptor::isValid() const noexcept { 
     return _fd >= 0; 
 }
 
-int FileDescriptor::get() const { 
+int FileDescriptor::get() const noexcept { 
     return _fd; 
 }
 
@@ -49,7 +49,7 @@ void FileDescriptor::reset(int fd, bool owned) {
     _owned = owned;
 }
 
-int FileDescriptor::release() {
+int FileDescriptor::release() noexcept {
     int fd = _fd;
     _fd = -1;
     _owned = false;

@@ -13,15 +13,17 @@ bool parseRequest(const std::string& data, Request& request) {
     try {
         size_t pos = data.find("\r\n");
         if (pos == std::string::npos) {
+            Logger::warn("HTTP request missing line terminator");
             return false;
         }
         
-        std::string requestLineStr = data.substr(0, pos);
-        request.requestLine = parseRequestLine(requestLineStr);
+        std::string_view requestLineView = std::string_view(data).substr(0, pos);
+        request.requestLine = parseRequestLine(requestLineView);
         
         size_t headerStart = pos + 2;
         size_t headerEnd = data.find("\r\n\r\n", headerStart);
         if (headerEnd == std::string::npos) {
+            Logger::warn("HTTP request missing header terminator");
             return false;
         }
         
@@ -40,17 +42,35 @@ bool parseRequest(const std::string& data, Request& request) {
         
         return true;
     } catch (const std::exception& e) {
-                return false;
+        Logger::error("HTTP parsing failed: " + std::string(e.what()));
+        return false;
     }
 }
 
-RequestLine parseRequestLine(const std::string& line) {
+RequestLine parseRequestLine(std::string_view line) {
     RequestLine requestLine;
     
-    std::string_view lineView(line);
-    auto [method, rest] = splitFirst(lineView, ' ');
-    auto [uri, version] = splitFirst(trimWhitespace(rest), ' ');
+    // Parse in-place using string_view to avoid unnecessary copies
+    size_t pos = 0;
+    size_t space1 = line.find(' ', pos);
+    if (space1 == std::string_view::npos) {
+        throw std::invalid_argument("Invalid request line: missing method delimiter");
+    }
     
+    std::string_view method = line.substr(pos, space1 - pos);
+    pos = space1 + 1;
+    
+    size_t space2 = line.find(' ', pos);
+    if (space2 == std::string_view::npos) {
+        throw std::invalid_argument("Invalid request line: missing URI delimiter");
+    }
+    
+    std::string_view uri = line.substr(pos, space2 - pos);
+    pos = space2 + 1;
+    
+    std::string_view version = line.substr(pos);
+    
+    // Only convert to string when storing in final structure
     requestLine.method = HTTP::stringToMethod(std::string(method));
     requestLine.uri = std::string(trimWhitespace(uri));
     requestLine.version = std::string(trimWhitespace(version));
@@ -83,6 +103,13 @@ void parseHeaderLine(std::string_view line, std::map<std::string, std::string>& 
     
     std::string key = std::string(trimWhitespace(key_view));
     std::string value = std::string(trimWhitespace(value_view));
+    
+    // Validate header against CRLF injection
+    if (key.find('\r') != std::string::npos || key.find('\n') != std::string::npos ||
+        value.find('\r') != std::string::npos || value.find('\n') != std::string::npos) {
+        Logger::warn("HTTP header injection attempt detected, ignoring header: " + key);
+        return;
+    }
     
     headers[key] = value;
 }
