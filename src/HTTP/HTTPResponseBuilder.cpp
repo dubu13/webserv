@@ -1,5 +1,4 @@
 #include "HTTP/HTTPResponseBuilder.hpp"
-#include "HTTP/HTTPTypes.hpp"
 #include <sstream>
 #include <ctime>
 #include <iomanip>

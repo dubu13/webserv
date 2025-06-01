@@ -4,7 +4,7 @@
 #include <string_view>
 #include <utility>
 #include <map>
-#include "HTTP/HTTPTypes.hpp"
+#include "HTTP/HTTPTypes.ipp"
 
 namespace HTTP {
     // HTTP Request Line structure

@@ -1,5 +1,5 @@
 #include "utils/FileUtils.hpp"
-#include "utils/FileCache.hpp"
+#include "utils/FileCache.ipp"
 #include "utils/Logger.hpp"
 #include <fstream>
 #include <sys/stat.h>

@@ -15,6 +15,14 @@ struct LocationBlock {
     std::string cgiPath;
     size_t clientMaxBodySize;
     
-    LocationBlock();
-    bool matchesPath(const std::string& requestPath) const;
+    // Inline constructor
+    LocationBlock() 
+        : autoindex(false), uploadEnable(false), clientMaxBodySize(0) {
+        allowedMethods.insert("GET");
+    }
+    
+    // Inline method - simple path matching
+    bool matchesPath(const std::string& requestPath) const {
+        return requestPath.find(path) == 0;
+    }
 };

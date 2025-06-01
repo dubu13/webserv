@@ -1,5 +1,4 @@
 #include "config/Config.hpp"
-#include "config/ConfigHandlers.ipp"
 #include "utils/Logger.hpp"
 #include "config/ConfigUtils.hpp"
 #include <fstream>

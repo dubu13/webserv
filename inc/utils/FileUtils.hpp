@@ -1,5 +1,5 @@
 #pragma once
-#include "HTTP/HTTPTypes.hpp"
+#include "HTTP/HTTPTypes.ipp"
 #include <string>
 #include <string_view>
 #include <optional>

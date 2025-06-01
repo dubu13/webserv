@@ -1,5 +1,4 @@
 #include "CGIHandler.hpp"
-#include "HTTP/HTTPTypes.hpp"
 #include "HTTP/HTTPResponseBuilder.hpp"
 #include "utils/Logger.hpp"
 #include <iostream>
