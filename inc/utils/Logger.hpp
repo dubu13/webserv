@@ -8,6 +8,7 @@
 #include <memory>
 #include <cstdio>
 #include <vector>
+#include <array>  // Add this line
 
 enum class LogLevel {
     DEBUG = 0,
@@ -89,24 +90,28 @@ public:
 private:
     template<typename... Args>
     static std::string formatString(const std::string& format, Args... args) {
-        // Use thread-local static buffer for better performance
-        constexpr size_t BUFFER_SIZE = 1024;
-        static thread_local std::vector<char> buffer(BUFFER_SIZE);
-        
-        int size = snprintf(buffer.data(), buffer.size(), format.c_str(), args...);
-        
-        if (size < 0) {
-            return format; // Fallback on formatting error
-        }
-        
-        if (static_cast<size_t>(size) < buffer.size()) {
-            // Fast path: message fits in buffer
-            return std::string(buffer.data(), size);
+        if constexpr (sizeof...(args) == 0) {
+            return format;  // No formatting needed when no args
         } else {
-            // Slow path: message too long, use dynamic allocation
-            std::unique_ptr<char[]> dynamicBuf(new char[size + 1]);
-            snprintf(dynamicBuf.get(), size + 1, format.c_str(), args...);
-            return std::string(dynamicBuf.get(), size);
+            // Use thread-local static buffer for better performance
+            constexpr size_t BUFFER_SIZE = 1024;
+            static thread_local std::vector<char> buffer(BUFFER_SIZE);
+            
+            int size = snprintf(buffer.data(), buffer.size(), format.c_str(), args...);
+            
+            if (size < 0) {
+                return format; // Fallback on formatting error
+            }
+            
+            if (static_cast<size_t>(size) < buffer.size()) {
+                // Fast path: message fits in buffer
+                return std::string(buffer.data(), size);
+            } else {
+                // Slow path: message too long, use dynamic allocation
+                std::unique_ptr<char[]> dynamicBuf(new char[size + 1]);
+                snprintf(dynamicBuf.get(), size + 1, format.c_str(), args...);
+                return std::string(dynamicBuf.get(), size);
+            }
         }
     }
 };
