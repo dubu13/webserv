@@ -13,14 +13,10 @@ CGIHandler::~CGIHandler() {}
 bool CGIHandler::canHandle(const std::string &filePath) const {
   size_t dot_pos = filePath.find_last_of('.');
   if (dot_pos == std::string::npos) {
-    Logger::debugf("No extension found in path: %s", filePath.c_str());
     return false;
   }
   std::string extension = filePath.substr(dot_pos);
-  bool canHandle = _cgi_handlers.find(extension) != _cgi_handlers.end();
-  Logger::debugf("CGI handler check for %s (%s): %s", filePath.c_str(), extension.c_str(), 
-                 canHandle ? "YES" : "NO");
-  return canHandle;
+  return _cgi_handlers.find(extension) != _cgi_handlers.end();
 }
 
 std::string CGIHandler::executeCGI(const std::string &uri, const HTTP::Request &request) {
