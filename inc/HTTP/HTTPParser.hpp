@@ -26,7 +26,7 @@ namespace HTTP {
     // HTTP parsing utilities - no state, no dependencies
     namespace Parser {
         bool parseRequest(const std::string& data, Request& request);
-        RequestLine parseRequestLine(const std::string& line);
+        RequestLine parseRequestLine(std::string_view line);
         
         // String parsing utilities (high performance with string_view)
         std::string_view trimWhitespace(std::string_view str);
