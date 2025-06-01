@@ -5,10 +5,8 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
-#include <memory>
-#include <cstdio>
 #include <vector>
-#include <array>  // Add this line
+#include <memory>
 
 enum class LogLevel {
     DEBUG = 0,
@@ -19,99 +17,126 @@ enum class LogLevel {
 
 class Logger {
 private:
-    static LogLevel _currentLevel;
-    static std::ofstream _logFile;
-    static bool _logToFile;
-    static bool _logToConsole;
-    static bool _useColors;
+    static LogLevel m_currentLevel;
+    static std::ofstream m_logFile;
+    static bool m_logToFile;
+    static bool m_logToConsole;
+    static bool m_useColors;
     
     // ANSI color codes
     static const std::string COLOR_RESET;
-    static const std::string COLOR_DEBUG;   // Cyan
-    static const std::string COLOR_INFO;    // Green
-    static const std::string COLOR_WARN;    // Yellow
-    static const std::string COLOR_ERROR;   // Red
+    static const std::string COLOR_DEBUG;
+    static const std::string COLOR_INFO;
+    static const std::string COLOR_WARN;
+    static const std::string COLOR_ERROR;
     
     static std::string getCurrentTime();
     static std::string levelToString(LogLevel level);
     static std::string getColorForLevel(LogLevel level);
-    static void writeLog(LogLevel level, const std::string& message);
+    static void writeLog(LogLevel level, std::string_view message);
 
 public:
-    static void setLevel(LogLevel level);
-    static void enableFileLogging(const std::string& filename);
-    static void disableFileLogging();
-    static void setConsoleLogging(bool enabled);
-    static void setColorLogging(bool enabled);
+    static void setLevel(LogLevel level) noexcept;
+    static void enableFileLogging(std::string_view filename);
+    static void disableFileLogging() noexcept;
+    static void setConsoleLogging(bool enabled) noexcept;
+    static void setColorLogging(bool enabled) noexcept;
     
 #ifdef DEBUG_LOGGING
-    static void debug(const std::string& message);
+    static void debug(std::string_view message);
     
     template<typename... Args>
-    static void debugf(const std::string& format, Args... args) {
-        if (_currentLevel <= LogLevel::DEBUG) {
-            debug(formatString(format, args...));
+    static void debugf(std::string_view format, Args&&... args) {
+        if (m_currentLevel <= LogLevel::DEBUG) {
+            debug(formatString(format, std::forward<Args>(args)...));
         }
     }
 #else
     // No-op functions when debug is disabled
-    static void debug(const std::string& /* message */) {}
+    static void debug(std::string_view) {}
     
     template<typename... Args>
-    static void debugf(const std::string& /* format */, Args... /* args */) {}
+    static void debugf(std::string_view, Args&&...) {}
 #endif
     
-    static void info(const std::string& message);
-    static void warn(const std::string& message);
-    static void error(const std::string& message);
+    static void info(std::string_view message);
+    static void warn(std::string_view message);
+    static void error(std::string_view message);
     
     // Convenience methods for formatted logging
     template<typename... Args>
-    static void infof(const std::string& format, Args... args) {
-        if (_currentLevel <= LogLevel::INFO) {
-            info(formatString(format, args...));
+    static void infof(std::string_view format, Args&&... args) {
+        if (m_currentLevel <= LogLevel::INFO) {
+            info(formatString(format, std::forward<Args>(args)...));
         }
     }
     
     template<typename... Args>
-    static void warnf(const std::string& format, Args... args) {
-        if (_currentLevel <= LogLevel::WARN) {
-            warn(formatString(format, args...));
+    static void warnf(std::string_view format, Args&&... args) {
+        if (m_currentLevel <= LogLevel::WARN) {
+            warn(formatString(format, std::forward<Args>(args)...));
         }
     }
     
     template<typename... Args>
-    static void errorf(const std::string& format, Args... args) {
-        if (_currentLevel <= LogLevel::ERROR) {
-            error(formatString(format, args...));
+    static void errorf(std::string_view format, Args&&... args) {
+        if (m_currentLevel <= LogLevel::ERROR) {
+            error(formatString(format, std::forward<Args>(args)...));
         }
     }
     
 private:
     template<typename... Args>
-    static std::string formatString(const std::string& format, Args... args) {
+    static std::string formatString(std::string_view format, Args&&... args) {
         if constexpr (sizeof...(args) == 0) {
-            return format;  // No formatting needed when no args
+            return std::string(format);
         } else {
-            // Use thread-local static buffer for better performance
-            constexpr size_t BUFFER_SIZE = 1024;
-            static thread_local std::vector<char> buffer(BUFFER_SIZE);
+            std::ostringstream ss;
+            formatStringImpl(ss, format, std::forward<Args>(args)...);
+            return ss.str();
+        }
+    }
+    
+    // Implementation of string formatting using ostringstream
+    template<typename T, typename... Args>
+    static void formatStringImpl(std::ostringstream& ss, std::string_view format, T&& value, Args&&... args) {
+        size_t pos = format.find('%');
+        if (pos == std::string::npos) {
+            ss << format;
+            return;
+        }
+        
+        ss << format.substr(0, pos);
+        
+        // Skip format specifier and move to next position
+        size_t nextPos = pos + 1;
+        while (nextPos < format.size() && 
+               (format[nextPos] == '-' || format[nextPos] == '+' || 
+                format[nextPos] == '0' || format[nextPos] == '#' || 
+                format[nextPos] == ' ' || std::isdigit(format[nextPos]) || 
+                format[nextPos] == '.' || format[nextPos] == '*' ||
+                format[nextPos] == 'h' || format[nextPos] == 'l' ||
+                format[nextPos] == 'j' || format[nextPos] == 'z' ||
+                format[nextPos] == 't' || format[nextPos] == 'L')) {
+            nextPos++;
+        }
+        
+        if (nextPos < format.size()) {
+            // Skip the format type character
+            nextPos++;
             
-            int size = snprintf(buffer.data(), buffer.size(), format.c_str(), args...);
+            // Process value
+            ss << value;
             
-            if (size < 0) {
-                return format; // Fallback on formatting error
-            }
-            
-            if (static_cast<size_t>(size) < buffer.size()) {
-                // Fast path: message fits in buffer
-                return std::string(buffer.data(), size);
-            } else {
-                // Slow path: message too long, use dynamic allocation
-                std::unique_ptr<char[]> dynamicBuf(new char[size + 1]);
-                snprintf(dynamicBuf.get(), size + 1, format.c_str(), args...);
-                return std::string(dynamicBuf.get(), size);
+            // Process remaining format and args
+            if (nextPos < format.size()) {
+                formatStringImpl(ss, format.substr(nextPos), std::forward<Args>(args)...);
             }
         }
+    }
+    
+    // Base case for recursion
+    static void formatStringImpl(std::ostringstream& ss, std::string_view format) {
+        ss << format;
     }
 };
