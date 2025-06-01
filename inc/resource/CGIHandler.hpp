@@ -2,6 +2,11 @@
 #include "HTTP/HTTP.hpp"
 #include <map>
 #include <string>
+#include <unistd.h>
+#include <vector>
+#include <sstream>
+#include <iostream>
+#include <sys/wait.h>
 class CGIHandler {
 private:
   std::string _root_directory;
@@ -17,4 +22,5 @@ public:
                        const std::string &handlerPath);
   bool canHandle(const std::string &filePath) const;
   void setRootDirectory(const std::string &root);
+  std::string parseCGIOutput(const std::string &output);
 };
