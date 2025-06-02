@@ -9,8 +9,8 @@
 struct LocationBlock;
 struct ServerBlock;
 
-#include "config/LocationBlock.ipp"
-#include "config/ServerBlock.ipp"
+#include "config/LocationBlock.hpp"
+#include "config/ServerBlock.hpp"
 
 class Config {
 private:
@@ -34,12 +34,12 @@ public:
     explicit Config(const std::string& fileName);
 
     void parseFromFile();
-    
+
     const std::unordered_map<std::string, ServerBlock>& getServers() const;
     const ServerBlock* getServer(const std::string& host, int port) const;
 
 private:
-    // Inline handler implementations
+
     void handleListen(const std::string& value, ServerBlock& server);
     void handleHost(const std::string& value, ServerBlock& server);
     void handleServerName(const std::string& value, ServerBlock& server);
@@ -47,7 +47,7 @@ private:
     void handleIndex(const std::string& value, ServerBlock& server);
     void handleErrorPage(const std::string& value, ServerBlock& server);
     void handleClientMaxBodySize(const std::string& value, ServerBlock& server);
-    
+
     void handleLocationRoot(const std::string& value, LocationBlock& location);
     void handleLocationIndex(const std::string& value, LocationBlock& location);
     void handleMethods(const std::string& value, LocationBlock& location);
