@@ -1,4 +1,4 @@
-#include "utils/FileUtils.hpp"
+#include "utils/Utils.hpp"
 #include "utils/FileCache.ipp"
 #include "utils/Logger.hpp"
 #include <fstream>
@@ -11,300 +11,228 @@
 #include <cstdio>
 #include <fcntl.h>
 #include <cerrno>
+#include <cctype>
+#include <sstream>
 
-namespace FileUtils {
-
-// URL decode function to prevent encoded path traversal attacks
-std::string urlDecode(std::string_view encoded) {
-    std::string decoded;
-    decoded.reserve(encoded.size());
-    
-    for (size_t i = 0; i < encoded.size(); ++i) {
-        if (encoded[i] == '%' && i + 2 < encoded.size()) {
-            int hex_value;
-            if (std::sscanf(encoded.substr(i + 1, 2).data(), "%2x", &hex_value) == 1) {
-                decoded += static_cast<char>(hex_value);
-                i += 2;
-            } else {
-                decoded += encoded[i];
-            }
-        } else if (encoded[i] == '+') {
-            decoded += ' ';
-        } else {
-            decoded += encoded[i];
-        }
-    }
-    return decoded;
-}
+using HTTP::StatusCode;
 
 static FileCache fileCache(100);
 
-static bool validateSecurity(std::string_view uri, HTTP::StatusCode& status) {
-    if (!isPathSafe(uri)) {
-        Logger::warnf("Security violation: unsafe path detected");
-        status = HTTP::StatusCode::FORBIDDEN;
-        return false;
+std::string FileUtils::readFile(std::string_view rootDir, std::string_view uri, StatusCode &status) {
+    std::string filePath;
+
+    if (!rootDir.empty()) {
+
+        filePath = HttpUtils::buildPath(rootDir, uri);
+        Logger::debugf("Built path from root: %s", filePath.c_str());
+    } else {
+
+        filePath = std::string(uri);
+        Logger::debugf("Using direct path: %s", filePath.c_str());
     }
-    return true;
-}
 
-static std::optional<struct stat> getFileStats(const std::string& filePath) {
-    struct stat fileStat;
-    return (stat(filePath.c_str(), &fileStat) == 0) ? std::make_optional(fileStat) : std::nullopt;
-}
-
-static std::optional<std::string> findIndexFile(std::string_view uri, const std::string& dirPath) {
-    const char* indexFiles[] = {"index.html", "index.htm", "index.php"};
-    
-    for (const char* indexFile : indexFiles) {
-        std::string indexPath = dirPath + "/" + indexFile;
-        if (access(indexPath.c_str(), R_OK) == 0) {
-            return std::string(uri) + (uri.back() == '/' ? "" : "/") + indexFile;
-        }
-    }
-    return std::nullopt;
-}
-
-std::string readFile(std::string_view rootDir, std::string_view uri, HTTP::StatusCode &status) {
-    const std::string filePath = buildPath(rootDir, uri);
-    
-    if (!validateSecurity(uri, status)) return "";
+    Logger::debugf("Reading file: %s", filePath.c_str());
 
     std::string content, mimeType;
     if (fileCache.getFile(filePath, content, mimeType)) {
-        status = HTTP::StatusCode::OK;
+        Logger::debugf("File found in cache: %s", filePath.c_str());
+        status = StatusCode::OK;
         return content;
     }
 
-    auto fileStat = getFileStats(filePath);
-    if (!fileStat) {
-        status = HTTP::StatusCode::NOT_FOUND;
+    if (!std::filesystem::exists(filePath)) {
+        Logger::debugf("File does not exist: %s", filePath.c_str());
+        status = StatusCode::NOT_FOUND;
         return "";
     }
 
-    if (S_ISDIR(fileStat->st_mode)) {
-        auto indexUri = findIndexFile(uri, filePath);
-        if (indexUri) {
-            return readFile(rootDir, *indexUri, status);
-        }
-        status = HTTP::StatusCode::FORBIDDEN;
+    std::ifstream file(filePath, std::ios::binary);
+    if (!file.is_open()) {
+        Logger::debugf("Cannot open file: %s", filePath.c_str());
+        status = StatusCode::NOT_FOUND;
         return "";
     }
 
-    // Use non-blocking file operations instead of std::ifstream
-    int fd = open(filePath.c_str(), O_RDONLY | O_NONBLOCK);
-    if (fd == -1 || access(filePath.c_str(), R_OK) != 0) {
-        if (fd != -1) close(fd);
-        status = HTTP::StatusCode::FORBIDDEN;
-        return "";
+    content = std::string((std::istreambuf_iterator<char>(file)),
+                          std::istreambuf_iterator<char>());
+    file.close();
+
+    if (content.empty()) {
+        Logger::debugf("File is empty: %s", filePath.c_str());
+    } else {
+        Logger::debugf("Successfully read %zu bytes from: %s", content.length(), filePath.c_str());
     }
-    
-    // Read file in chunks using non-blocking I/O
-    content.clear();
-    content.reserve(fileStat->st_size);
-    
-    char buffer[4096];
-    ssize_t bytesRead;
-    while ((bytesRead = read(fd, buffer, sizeof(buffer))) > 0) {
-        content.append(buffer, bytesRead);
-    }
-    
-    close(fd);
-    
-    if (bytesRead == -1 && errno != EAGAIN && errno != EWOULDBLOCK) {
-        status = HTTP::StatusCode::INTERNAL_SERVER_ERROR;
-        return "";
-    }
-    fileCache.cacheFile(filePath, content, "text/html");
-    status = HTTP::StatusCode::OK;
+
+    fileCache.cacheFile(filePath, content, FileUtils::getMimeType(filePath));
+    status = StatusCode::OK;
     return content;
 }
 
-bool writeFile(std::string_view rootDir, std::string_view uri, std::string_view content, HTTP::StatusCode &status) {
-    const std::string filePath = buildPath(rootDir, uri);
-    
-    if (!validateSecurity(uri, status)) return false;
-    
-    std::ofstream file(filePath, std::ios::binary);
-    if (!file.is_open()) {
-        status = HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+bool FileUtils::writeFile(std::string_view rootDir, std::string_view uri, std::string_view content, StatusCode &status) {
+    const std::string filePath = HttpUtils::buildPath(rootDir, uri);
+
+    if (!HttpUtils::isPathSafe(uri)) {
+        status = StatusCode::FORBIDDEN;
         return false;
     }
-    
+
+    std::ofstream file(filePath, std::ios::binary);
+    if (!file.is_open()) {
+        status = StatusCode::INTERNAL_SERVER_ERROR;
+        return false;
+    }
+
     file << content;
     if (file.good()) {
         fileCache.cacheFile(filePath, std::string(content), "text/html");
-        status = HTTP::StatusCode::CREATED;
+        status = StatusCode::CREATED;
         return true;
     }
-    
-    status = HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+
+    status = StatusCode::INTERNAL_SERVER_ERROR;
     return false;
 }
 
-bool deleteFile(std::string_view rootDir, std::string_view uri, HTTP::StatusCode &status) {
-    const std::string filePath = buildPath(rootDir, uri);
-    
-    if (!validateSecurity(uri, status)) return false;
-    
-    auto fileStat = getFileStats(filePath);
-    if (!fileStat) {
-        status = HTTP::StatusCode::NOT_FOUND;
+bool FileUtils::deleteFile(std::string_view rootDir, std::string_view uri, StatusCode &status) {
+    const std::string filePath = HttpUtils::buildPath(rootDir, uri);
+
+    if (!HttpUtils::isPathSafe(uri)) {
+        status = StatusCode::FORBIDDEN;
         return false;
     }
-    
-    if (S_ISDIR(fileStat->st_mode)) {
-        status = HTTP::StatusCode::FORBIDDEN;
+
+    struct stat fileStat;
+    if (stat(filePath.c_str(), &fileStat) != 0) {
+        status = StatusCode::NOT_FOUND;
         return false;
     }
-    
+
+    if (S_ISDIR(fileStat.st_mode)) {
+        status = StatusCode::FORBIDDEN;
+        return false;
+    }
+
     if (unlink(filePath.c_str()) == 0) {
-        status = HTTP::StatusCode::NO_CONTENT;
+        status = StatusCode::NO_CONTENT;
         return true;
     }
-    
-    status = HTTP::StatusCode::INTERNAL_SERVER_ERROR;
+
+    status = StatusCode::INTERNAL_SERVER_ERROR;
     return false;
 }
 
-std::optional<size_t> fileExists(std::string_view rootDir, std::string_view uri) {
-    const auto fileStat = getFileStats(buildPath(rootDir, uri));
-    return fileStat ? std::make_optional(fileStat->st_size) : std::nullopt;
+std::optional<size_t> FileUtils::fileExists(std::string_view rootDir, std::string_view uri) {
+    const std::string filePath = HttpUtils::buildPath(rootDir, uri);
+    struct stat fileStat;
+    return (stat(filePath.c_str(), &fileStat) == 0) ?
+           std::make_optional(fileStat.st_size) : std::nullopt;
 }
 
-std::string buildPath(std::string_view root, std::string_view path) {
-    const std::string cleanPath = sanitizePath(path);
-    return (cleanPath.empty() || cleanPath == "/") 
-        ? std::string(root) + "/index.html"
-        : std::string(root) + cleanPath;
-}
-
-bool isPathSafe(std::string_view path) {
-    // URL decode first to catch encoded attacks
-    std::string decoded = urlDecode(path);
-    
-    // Check for null bytes (prevents null byte injection)
-    if (decoded.find('\0') != std::string::npos) {
-        Logger::warn("Path contains null byte: " + std::string(path));
-        return false;
-    }
-    
-    // Check for directory traversal patterns
-    if (decoded.find("..") != std::string::npos) {
-        Logger::warn("Path contains directory traversal: " + decoded);
-        return false;
-    }
-    
-    // Additional checks for various bypass attempts
-    if (decoded.find("./") != std::string::npos ||
-        decoded.find("\\") != std::string::npos ||
-        decoded.find("~") != std::string::npos) {
-        Logger::warn("Path contains suspicious patterns: " + decoded);
-        return false;
-    }
-    
-    return true;
-}
-
-std::filesystem::path canonicalizePath(std::string_view path) {
-    try {
-        return std::filesystem::canonical(std::filesystem::path(path));
-    } catch (const std::filesystem::filesystem_error&) {
-        return std::filesystem::path{};
-    }
-}
-
-std::string sanitizePath(std::string_view path) {
-    if (path.empty()) return "/";
-    
-    std::string result{path};
-    if (result[0] != '/') result = "/" + result;
-    
-    for (size_t pos = 0; (pos = result.find("//", pos)) != std::string::npos;) {
-        result.replace(pos, 2, "/");
-    }
-    
-    return result;
-}
-
-std::optional<std::string> readFileContent(std::string_view filePath) {
-    std::ifstream file(std::string(filePath), std::ios::binary);
-    return file.is_open() 
-        ? std::make_optional(std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>()))
-        : std::nullopt;
-}
-
-bool writeFileContent(std::string_view filePath, std::string_view content) {
-    std::ofstream file(std::string(filePath), std::ios::binary);
-    return file.is_open() && (file << content) && file.good();
-}
-
-void clearCache() {
-    fileCache.clearCache();
-}
-
-void setCacheMaxSize(size_t maxSize) {
-    fileCache = FileCache(maxSize);
-}
-
-bool isDirectory(std::string_view path) {
+bool FileUtils::isDirectory(std::string_view path) {
     struct stat pathStat;
     return stat(std::string(path).c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode);
 }
 
-std::string generateDirectoryListing(std::string_view dirPath, std::string_view uri) {
-    std::string html = 
+std::string FileUtils::generateDirectoryListing(std::string_view dirPath, std::string_view uri) {
+    std::string html =
         "<html><head><title>Directory listing for " + std::string(uri) + "</title>"
         "<style>body{font-family:Arial,sans-serif;margin:20px}h1{color:#333;border-bottom:1px solid #ccc}"
         "ul{list-style-type:none;padding:0}li{margin:5px 0}a{text-decoration:none;color:#0066cc}"
         "a:hover{text-decoration:underline}.dir{font-weight:bold}.file{color:#666}</style></head><body>"
         "<h1>Directory listing for " + std::string(uri) + "</h1><hr><ul>";
-    
+
     if (uri != "/") {
         html += "<li><a href=\"../\" class=\"dir\">../</a></li>";
     }
-    
+
     DIR* dir = opendir(std::string(dirPath).c_str());
     if (!dir) {
         html += "</ul><hr><em>Error reading directory</em></body></html>";
         return html;
     }
-    
+
     std::vector<std::pair<std::string, bool>> entries;
     struct dirent* entry;
     while ((entry = readdir(dir)) != nullptr) {
         std::string name = entry->d_name;
         if (name == "." || name == "..") continue;
-        
+
         std::string fullPath = std::string(dirPath) + "/" + name;
-        entries.emplace_back(name, isDirectory(fullPath));
+        entries.emplace_back(name, FileUtils::isDirectory(fullPath));
     }
     closedir(dir);
-    
-    std::sort(entries.begin(), entries.end(), 
+
+    std::sort(entries.begin(), entries.end(),
               [](const auto& a, const auto& b) {
                   return a.second != b.second ? a.second > b.second : a.first < b.first;
               });
-    
+
     for (const auto& [name, isDir] : entries) {
         const std::string href = name + (isDir ? "/" : "");
         const std::string cssClass = isDir ? "dir" : "file";
         const std::string displayName = name + (isDir ? "/" : "");
         html += "<li><a href=\"" + href + "\" class=\"" + cssClass + "\">" + displayName + "</a></li>";
     }
-    
+
     html += "</ul><hr><em>Generated by WebServ</em></body></html>";
     return html;
 }
 
-std::string extractQueryParams(std::string_view uri) {
-    const size_t queryPos = uri.find('?');
-    return (queryPos != std::string_view::npos) ? std::string(uri.substr(queryPos + 1)) : "";
+std::optional<std::string> FileUtils::readFileContent(std::string_view filePath) {
+    std::ifstream file(std::string(filePath), std::ios::binary);
+    return file.is_open()
+        ? std::make_optional(std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>()))
+        : std::nullopt;
 }
 
-std::string cleanUri(std::string_view uri) {
-    const size_t queryPos = uri.find('?');
-    return (queryPos != std::string_view::npos) ? std::string(uri.substr(0, queryPos)) : std::string(uri);
+bool FileUtils::writeFileContent(std::string_view filePath, std::string_view content) {
+    std::ofstream file(std::string(filePath), std::ios::binary);
+    return file.is_open() && (file << content) && file.good();
 }
 
+void FileUtils::clearCache() {
+    fileCache.clearCache();
+}
+
+void FileUtils::setCacheMaxSize(size_t maxSize) {
+    fileCache = FileCache(maxSize);
+}
+
+bool FileUtils::exists(std::string_view path) {
+    struct stat fileStat;
+    return stat(std::string(path).c_str(), &fileStat) == 0;
+}
+
+bool FileUtils::createDirectories(std::string_view path) {
+    try {
+        return std::filesystem::create_directories(std::filesystem::path(path));
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+std::string FileUtils::getMimeType(std::string_view filePath) {
+    size_t dotPos = filePath.find_last_of('.');
+    if (dotPos == std::string::npos) {
+        return "application/octet-stream";
+    }
+
+    std::string extension = std::string(filePath.substr(dotPos));
+    std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+    if (extension == ".html" || extension == ".htm") return "text/html; charset=utf-8";
+    if (extension == ".css") return "text/css";
+    if (extension == ".js") return "application/javascript";
+    if (extension == ".json") return "application/json";
+
+    if (extension == ".png") return "image/png";
+    if (extension == ".jpg" || extension == ".jpeg") return "image/jpeg";
+    if (extension == ".gif") return "image/gif";
+    if (extension == ".svg") return "image/svg+xml";
+    if (extension == ".ico") return "image/x-icon";
+
+    if (extension == ".txt") return "text/plain; charset=utf-8";
+    if (extension == ".xml") return "application/xml";
+
+    return "application/octet-stream";
 }
