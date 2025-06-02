@@ -1,196 +1,195 @@
-#include "Server.hpp"
-#include "ClientHandler.hpp"
-#include "utils/Logger.hpp"
+#include <fcntl.h>
+#include <algorithm>
+#include <unistd.h>
 #include <cerrno>
-#include <iostream>
+#include <cstring>
+#include <ctime>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
 #include <stdexcept>
-#include <memory>
 
-extern bool g_running;
+#include "Server.hpp"
+#include "Logger.hpp"
+#include "HTTP/routing/RequestRouter.hpp"
+#include "HTTP/handlers/MethodDispatcher.hpp"
+#include "HTTP/core/HttpResponse.hpp"
+#include "HTTP/core/HTTPParser.hpp"
+#include "utils/Utils.hpp"
+#include <sstream>
 
-Server::Server(const ServerBlock& config) 
-    : _config(config), _running(false) {
-    if (getrlimit(RLIMIT_NOFILE, &_rlim) == -1) {
-        throw std::runtime_error("Failed to get file descriptor limit");
-    }
-    Logger::infof("System allows %ld file descriptors", _rlim.rlim_cur);
-    
-    // Extract port from listen directives for display
-    int port = 8080; // default
-    if (!config.listenDirectives.empty()) {
-        port = config.listenDirectives[0].second;
-    }
-    Logger::infof("Server will listen on %s:%d", config.host.c_str(), port);
-    
-    // Create the ClientHandler with configuration  
-    _clientHandler = std::make_unique<ClientHandler>(*this, config.root, 60);  // TODO: make timeout configurable
-}
+using HTTP::parseRequest;
+using HTTP::Request;
+
+Server::Server(const ServerBlock* config)
+    : _serverFd(-1)
+    , _running(false)
+    , _config(config)
+    , _router(config) {}
 
 Server::~Server() {
-  // FileDescriptor and unique_ptr will automatically clean up resources
+    if (_serverFd >= 0) {
+        close(_serverFd);
+    }
+}
+
+bool Server::start() {
+    if (_serverFd < 0) {
+        setupSocket();
+    }
+
+    if (_serverFd < 0) {
+        return false;
+    }
+
+    _running = true;
+
+    while (_running) {
+        auto activeFds = _poller.poll(1000);
+
+        for (const auto& pfd : activeFds) {
+            if (pfd.fd == _serverFd) {
+                acceptConnection();
+            } else {
+                handleClient(pfd.fd);
+            }
+        }
+
+        checkTimeouts();
+    }
+
+    return true;
 }
 
 void Server::setupSocket() {
-  Logger::debug("Starting socket setup...");
-  int socketFd = socket(AF_INET, SOCK_STREAM, 0);
-  if (socketFd == -1) {
-    Logger::errorf("Failed to create socket: %s", strerror(errno));
-    throw std::runtime_error("Failed to create socket");
-  }
-  _server_fd.reset(socketFd);
-  Logger::debugf("Socket created successfully (fd: %d)", _server_fd.get());
-  
-  int opt = 1;
-  if (setsockopt(_server_fd.get(), SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-    Logger::errorf("Failed to set SO_REUSEADDR: %s", strerror(errno));
-    throw std::runtime_error("Failed to set socket options");
-  }
-  Logger::debug("SO_REUSEADDR option set successfully");
-  
-  _address.sin_family = AF_INET;
-  // Extract port from listen directives
-  int port = 8080; // default
-  if (!_config.listenDirectives.empty()) {
-    port = _config.listenDirectives[0].second;
-  }
-  _address.sin_port = htons(port);
-  Logger::debugf("Setting up socket for %s:%d", _config.host.c_str(), port);
-  
-  if (inet_pton(AF_INET, _config.host.c_str(), &_address.sin_addr) <= 0) {
-    Logger::errorf("Failed to convert host address '%s': %s", _config.host.c_str(), strerror(errno));
-    throw std::runtime_error("Failed to convert host address");
-  }
-  Logger::debugf("Host address '%s' converted successfully", _config.host.c_str());
-  
-  if (bind(_server_fd.get(), (struct sockaddr *)&_address, sizeof(_address)) < 0) {
-    Logger::errorf("Failed to bind socket to %s:%d: %s", _config.host.c_str(), port, strerror(errno));
-    throw std::runtime_error("Failed to bind socket");
-  }
-  Logger::debugf("Socket bound successfully to %s:%d", _config.host.c_str(), port);
-  
-  if (listen(_server_fd.get(), SOMAXCONN) < 0) {
-    Logger::errorf("Failed to listen on socket: %s", strerror(errno));
-    throw std::runtime_error("Failed to listen on socket");
-  }
-  Logger::debugf("Socket listening with backlog %d", SOMAXCONN);
-  
-  setNonBlocking(_server_fd.get());
-  Logger::info("Socket setup complete - non-blocking mode enabled");
-}
-
-void Server::setNonBlocking(int fd) {
-  Logger::debugf("Setting non-blocking mode for fd: %d", fd);
-  int flags = fcntl(fd, F_GETFL, 0);
-  if (flags == -1) {
-    Logger::errorf("Failed to get file descriptor flags for fd %d: %s", fd, strerror(errno));
-    throw std::runtime_error("Failed to set non-blocking mode");
-  }
-  Logger::debugf("Current flags for fd %d: 0x%x", fd, flags);
-  
-  if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
-    Logger::errorf("Failed to set O_NONBLOCK flag for fd %d: %s", fd, strerror(errno));
-    throw std::runtime_error("Failed to set non-blocking mode");
-  }
-  Logger::debugf("Successfully set non-blocking mode for fd: %d", fd);
-}
-
-void Server::run() {
-  _running = true;
-  Logger::debug("Server run() starting - setting up socket and poller");
-  setupSocket();
-  _poller.addFd(_server_fd.get(), POLLIN);
-  Logger::debugf("Added server socket (fd: %d) to poller with POLLIN events", _server_fd.get());
-  
-  int port = 8080; // default
-  if (!_config.listenDirectives.empty()) {
-    port = _config.listenDirectives[0].second;
-  }
-  Logger::infof("Server listening on %s:%d", _config.host.c_str(), port);
-  Logger::debug("Entering main event loop");
-  
-  while (g_running && _running) {
-    try {
-      Logger::debugf("Polling %zu file descriptors...", _poller.getFdCount());
-      auto active_fds = _poller.poll();
-      Logger::debugf("Poll returned %zu active file descriptors", active_fds.size());
-      
-      for (const auto &pfd : active_fds) {
-        Logger::debugf("Processing fd: %d, events: 0x%x", pfd.fd, pfd.revents);
-        
-        if (isServerSocket(pfd.fd)) {
-          if (_poller.hasActivity(pfd, POLLIN)) {
-            Logger::debug("Server socket has incoming connection");
-            acceptConnection();
-          }
-        } else {
-          Logger::debugf("Client socket activity on fd: %d", pfd.fd);
-          handleClientEvent(pfd.fd, pfd.revents);
-        }
-      }
-      _clientHandler->checkTimeouts();
-    } catch (const std::exception &e) {
-      Logger::errorf("Server error in main loop: %s", e.what());
+    _serverFd = socket(AF_INET, SOCK_STREAM, 0);
+    if (_serverFd < 0) {
+        Logger::error("Failed to create socket");
+        return;
     }
-  }
-  Logger::info("Server main loop exited");
+
+    int opt = 1;
+    if (setsockopt(_serverFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        Logger::error("Failed to set socket options");
+        close(_serverFd);
+        _serverFd = -1;
+        return;
+    }
+
+    int flags = fcntl(_serverFd, F_GETFL, 0);
+    if (flags < 0 || fcntl(_serverFd, F_SETFL, flags | O_NONBLOCK) < 0) {
+        Logger::error("Failed to set non-blocking mode");
+        close(_serverFd);
+        _serverFd = -1;
+        return;
+    }
+
+    struct sockaddr_in addr;
+    std::memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(_config->listenDirectives.empty() ? 8080 : _config->listenDirectives[0].second);
+
+    if (bind(_serverFd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        Logger::error("Failed to bind socket");
+        close(_serverFd);
+        _serverFd = -1;
+        return;
+    }
+
+    if (listen(_serverFd, SOMAXCONN) < 0) {
+        Logger::error("Failed to listen on socket");
+        close(_serverFd);
+        _serverFd = -1;
+        return;
+    }
+
+    _poller.add(_serverFd, POLLIN);
 }
 
 void Server::acceptConnection() {
-  Logger::debug("Attempting to accept new connection");
-  struct sockaddr_in client_addr;
-  socklen_t addr_len = sizeof(client_addr);
-  int client_fd =
-      accept(_server_fd.get(), (struct sockaddr *)&client_addr, &addr_len);
-  if (client_fd < 0) {
-    if (errno != EAGAIN && errno != EWOULDBLOCK) {
-      Logger::errorf("Accept failed: %s (errno: %d)", strerror(errno), errno);
-    } else {
-      Logger::debug("Accept would block - no incoming connections");
+    struct sockaddr_in clientAddr;
+    socklen_t addrLen = sizeof(clientAddr);
+
+    int clientFd = accept(_serverFd, (struct sockaddr*)&clientAddr, &addrLen);
+    if (clientFd < 0) {
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            Logger::error("Failed to accept connection");
+        }
+        return;
     }
-    return;
-  }
-  
-  Logger::debugf("New connection accepted (fd: %d)", client_fd);
-  
-  // Check file descriptor limits (subject requirement: never crash, even when out of resources)
-  if (_clientHandler->getClientCount() >= _rlim.rlim_cur - 10) {
-    Logger::warnf("Rejecting connection - too many clients (%zu/%ld file descriptors)", 
-                  _clientHandler->getClientCount(), _rlim.rlim_cur);
-    close(client_fd);
-    return;
-  }
-  
-  try {
-    setNonBlocking(client_fd);
-    _clientHandler->addClient(client_fd, client_addr);
-    Logger::debugf("Client successfully added and configured (fd: %d)", client_fd);
-  } catch (const std::exception &e) {
-    Logger::errorf("Failed to configure new client (fd: %d): %s", client_fd, e.what());
-    close(client_fd);
-  }
+
+    int flags = fcntl(clientFd, F_GETFL, 0);
+    if (flags < 0 || fcntl(clientFd, F_SETFL, flags | O_NONBLOCK) < 0) {
+        Logger::error("Failed to set client socket to non-blocking mode");
+        close(clientFd);
+        return;
+    }
+
+    _poller.add(clientFd, POLLIN);
+    _clients[clientFd] = std::time(nullptr);
 }
 
-void Server::handleClientEvent(int fd, short events) {
-  Logger::debugf("Handling client event for fd: %d, events: 0x%x", fd, events);
-  
-  if (events & POLLERR) {
-    Logger::debugf("POLLERR detected on fd: %d", fd);
-    _clientHandler->removeClient(fd);
-  } else if (events & POLLHUP) {
-    Logger::debugf("POLLHUP detected on fd: %d - client disconnected", fd);
-    _clientHandler->removeClient(fd);
-  } else if (events & POLLIN) {
-    Logger::debugf("POLLIN event on fd: %d - data available for reading", fd);
-    _clientHandler->handleRead(fd);
-  } else if (events & POLLOUT) {
-    Logger::debugf("POLLOUT event on fd: %d - ready for writing", fd);
-    _clientHandler->handleWrite(fd);
-  } else {
-    Logger::debugf("Unhandled event 0x%x on fd: %d", events, fd);
-  }
+void Server::handleClient(int fd) {
+    char buffer[4096];
+    ssize_t bytesRead = recv(fd, buffer, sizeof(buffer) - 1, 0);
+
+    if (bytesRead <= 0) {
+        if (bytesRead < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            return;
+        }
+        removeClient(fd);
+        return;
+    }
+
+    buffer[bytesRead] = '\0';
+    std::string requestData(buffer, bytesRead);
+
+    try {
+        Request request;
+        if (!parseRequest(requestData, request)) {
+            Logger::error("Failed to parse HTTP request");
+            removeClient(fd);
+            return;
+        }
+
+        Logger::debugf("Processing request URI: '%s'", request.requestLine.uri.c_str());
+
+        std::string root = "./www";
+        if (_config && !_config->root.empty()) {
+            root = _config->root;
+        }
+
+        std::string responseStr = MethodHandler::handleRequest(request, root);
+        send(fd, responseStr.c_str(), responseStr.length(), 0);
+
+        removeClient(fd);
+
+    } catch (const std::exception& e) {
+        Logger::errorf("Error handling client: %s", e.what());
+        removeClient(fd);
+    }
 }
 
-void Server::stop() {
-  _running = false;
-  // FileDescriptor will automatically close when needed
+void Server::removeClient(int fd) {
+    _poller.remove(fd);
+    _clients.erase(fd);
+    close(fd);
+}
+
+void Server::checkTimeouts() {
+    const time_t timeout = 60;
+    const time_t now = std::time(nullptr);
+
+    auto it = _clients.begin();
+    while (it != _clients.end()) {
+        if (now - it->second > timeout) {
+            int fd = it->first;
+            it = _clients.erase(it);
+            _poller.remove(fd);
+            close(fd);
+        } else {
+            ++it;
+        }
+    }
 }

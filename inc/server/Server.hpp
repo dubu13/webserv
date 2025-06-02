@@ -1,36 +1,34 @@
 #pragma once
-#include "Poller.hpp"
-#include "config/Config.hpp"
-#include "utils/FileDescriptor.hpp"
-#include <arpa/inet.h>
-#include <fcntl.h>
-#include <netinet/in.h>
+
+#include <vector>
 #include <string>
-#include <sys/resource.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <memory>
-class ClientHandler;
+#include <map>
+#include <ctime>
+#include "ServerBlock.hpp"
+#include "HTTP/routing/RequestRouter.hpp"
+#include "HTTP/handlers/MethodDispatcher.hpp"
+#include "Poller.hpp"
+
 class Server {
 private:
-  utils::FileDescriptor _server_fd;
-  struct sockaddr_in _address;
-  ServerBlock _config;
-  Poller _poller;
-  std::unique_ptr<ClientHandler> _clientHandler;
-  rlimit _rlim;
-  bool _running;
-  void setupSocket();
-  void setNonBlocking(int fd);
+    int _serverFd;
+    bool _running;
+    Poller _poller;
+    std::map<int, time_t> _clients;
+    const ServerBlock* _config;
+    RequestRouter _router;
+
 public:
-  Server(const ServerBlock &config);
-  ~Server();
-  void run();
-  void stop();
-  int getServerFd() const { return _server_fd.get(); }
-  bool isServerSocket(int fd) const { return fd == _server_fd.get(); }
-  const ServerBlock &getConfig() const { return _config; }
-  void acceptConnection();
-  void handleClientEvent(int fd, short events);
-  Poller &getPoller() { return _poller; }
+    explicit Server(const ServerBlock* config);
+    ~Server();
+
+    bool start();
+    void stop() { _running = false; }
+
+private:
+    void setupSocket();
+    void acceptConnection();
+    void handleClient(int fd);
+    void removeClient(int fd);
+    void checkTimeouts();
 };
