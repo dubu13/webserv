@@ -1,44 +1,34 @@
 #include "utils/Logger.hpp"
 
-// Static member definitions
-LogLevel Logger::m_currentLevel = LogLevel::INFO;
-std::ofstream Logger::m_logFile;
-bool Logger::m_logToFile = false;
-bool Logger::m_logToConsole = true;
-bool Logger::m_useColors = true;
+LogLevel Logger::_currentLevel = LogLevel::INFO;
+std::ofstream Logger::_logFile;
+bool Logger::_logToFile = false;
+bool Logger::_logToConsole = true;
+bool Logger::_useColors = true;
 
-// ANSI color codes
 const std::string Logger::COLOR_RESET = "\033[0m";
-const std::string Logger::COLOR_DEBUG = "\033[36m";   // Cyan
-const std::string Logger::COLOR_INFO = "\033[32m";    // Green  
-const std::string Logger::COLOR_WARN = "\033[33m";    // Yellow
-const std::string Logger::COLOR_ERROR = "\033[31m";   // Red
+const std::string Logger::COLOR_DEBUG = "\033[36m";
+const std::string Logger::COLOR_INFO = "\033[32m";
+const std::string Logger::COLOR_WARN = "\033[33m";
+const std::string Logger::COLOR_ERROR = "\033[31m";
 
 void Logger::setLevel(LogLevel level) noexcept {
-    m_currentLevel = level;
+    _currentLevel = level;
 }
 
 void Logger::enableFileLogging(std::string_view filename) {
-    if (m_logFile.is_open()) {
-        m_logFile.close();
+    if (_logFile.is_open()) {
+        _logFile.close();
     }
-    m_logFile.open(std::string(filename), std::ios::app);
-    m_logToFile = m_logFile.is_open();
+    _logFile.open(std::string(filename), std::ios::app);
+    _logToFile = _logFile.is_open();
 }
 
 void Logger::disableFileLogging() noexcept {
-    if (m_logFile.is_open()) {
-        m_logFile.close();
+    if (_logFile.is_open()) {
+        _logFile.close();
     }
-    m_logToFile = false;
-}
-
-void Logger::setConsoleLogging(bool enabled) noexcept {
-    m_logToConsole = enabled;
-}
-
-void Logger::setColorLogging(bool enabled) noexcept {
-    m_useColors = enabled;
+    _logToFile = false;
 }
 
 std::string Logger::getCurrentTime() {
@@ -46,7 +36,7 @@ std::string Logger::getCurrentTime() {
     auto time_t = std::chrono::system_clock::to_time_t(now);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         now.time_since_epoch()) % 1000;
-    
+
     std::stringstream ss;
     ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
     ss << '.' << std::setfill('0') << std::setw(3) << ms.count();
@@ -64,10 +54,10 @@ std::string Logger::levelToString(LogLevel level) {
 }
 
 std::string Logger::getColorForLevel(LogLevel level) {
-    if (!m_useColors) {
+    if (!_useColors) {
         return "";
     }
-    
+
     switch (level) {
         case LogLevel::DEBUG: return COLOR_DEBUG;
         case LogLevel::INFO:  return COLOR_INFO;
@@ -78,27 +68,25 @@ std::string Logger::getColorForLevel(LogLevel level) {
 }
 
 void Logger::writeLog(LogLevel level, std::string_view message) {
-    if (level < m_currentLevel) {
+    if (level < _currentLevel) {
         return;
     }
-    
+
     std::string timestamp = getCurrentTime();
     std::string levelStr = levelToString(level);
-    
-    // For console output with colors
-    if (m_logToConsole) {
+
+    if (_logToConsole) {
         std::string colorCode = getColorForLevel(level);
-        std::string resetCode = m_useColors ? COLOR_RESET : "";
-        
-        std::cout << "[" << timestamp << "] " << colorCode << "[" << levelStr << "]" 
+        std::string resetCode = _useColors ? COLOR_RESET : "";
+
+        std::cout << "[" << timestamp << "] " << colorCode << "[" << levelStr << "]"
                   << resetCode << " " << message << std::endl;
     }
-    
-    // For file output without colors
-    if (m_logToFile && m_logFile.is_open()) {
-        m_logFile << "[" << timestamp << "] [" << levelStr << "] " 
+
+    if (_logToFile && _logFile.is_open()) {
+        _logFile << "[" << timestamp << "] [" << levelStr << "] "
                  << message << std::endl;
-        m_logFile.flush();
+        _logFile.flush();
     }
 }
 
