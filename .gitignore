@@ -48,7 +48,7 @@ bin/
 *.log
 *.pid
 *.tmp
-core
+# core
 .depend
 
 # Environment specific files
