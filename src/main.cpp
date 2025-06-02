@@ -1,64 +1,47 @@
-#include "server/MultiServerManager.hpp"
-#include "config/Config.hpp"
-#include "utils/Logger.hpp"
-#include <csignal>
+#include <signal.h>
 #include <iostream>
-#include <atomic>
-#include <thread>
-#include <chrono>
+#include "config/Config.hpp"
+#include "server/Server.hpp"
+#include "utils/Logger.hpp"
 
-std::atomic<bool> g_running{true};
+static bool g_running = true;
 
-void signalHandler(int signum) {
-    Logger::infof("Received signal %d, shutting down gracefully", signum);
-    g_running.store(false);
+void signalHandler(int) {
+    g_running = false;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     try {
-        // Initialize logging
-        Logger::setLevel(LogLevel::DEBUG);
-        Logger::enableFileLogging("webserv.log");
-        Logger::info("WebServer starting up...");
-        
+
         signal(SIGINT, signalHandler);
-        std::string configFile = (argc > 1) ? argv[1] : "config/default.conf";
-        Logger::infof("Using config file: %s", configFile.c_str());
-        
+        Logger::setLevel(LogLevel::INFO);
+
+        std::string configFile = (argc > 1) ? argv[1] : "config/webserv.conf";
         Config config(configFile);
         config.parseFromFile();
-        
+
         const auto& servers = config.getServers();
-        Logger::infof("Loaded %zu server configurations", servers.size());
-        
-        // Stage 1.2: Multiple Server Support - Use MultiServerManager
-        if (!servers.empty()) {
-            MultiServerManager serverManager;
-            
-            // Initialize all server instances from configuration
-            serverManager.initializeServers(config);
-            Logger::infof("Initialized %zu server instances", serverManager.getServerCount());
-            
-            // Start all servers concurrently
-            serverManager.startAll();
-            Logger::info("All servers started, running until shutdown signal");
-            
-            // Wait for shutdown signal
-            while (g_running.load()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-            
-            // Graceful shutdown
-            Logger::info("Shutdown signal received, stopping all servers");
-            serverManager.stopAll();
-        } else {
-            Logger::error("No server configurations found in config file");
+        if (servers.empty()) {
+            std::cerr << "No server configurations found\n";
             return 1;
         }
-        Logger::info("Server stopped successfully");
-    } catch (const std::exception &e) {
-        Logger::errorf("Fatal error: %s", e.what());
+
+        auto it = servers.begin();
+        const ServerBlock* serverConfig = &it->second;
+
+        Server server(serverConfig);
+        std::cout << "Server starting on " << serverConfig->host << ":"
+                 << (serverConfig->listenDirectives.empty() ? 8080 : serverConfig->listenDirectives[0].second) << "\n";
+
+        while (g_running) {
+            server.start();
+        }
+
+        std::cout << "Server stopped gracefully\n";
+        return 0;
+
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << "\n";
         return 1;
     }
-    return 0;
 }
