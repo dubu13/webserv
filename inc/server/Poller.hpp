@@ -1,22 +1,33 @@
 #pragma once
-#include <cerrno>
-#include <cstring>
-#include <poll.h>
-#include <stdexcept>
+
 #include <vector>
+#include <poll.h>
+#include <map>
 #include <chrono>
 
 class Poller {
-private:
-  std::vector<struct pollfd> _poll_fds;
-  static const inline int _timeout = 1000;  // Add 'inline' here
 public:
-  void addFd(int fd, short events);
-  void removeFd(int fd);
-  void updateFd(int fd, short events);
-  std::vector<struct pollfd> poll();
-  bool hasActivity(const struct pollfd &pfd, short events) const;
-  bool empty() const;
-  void setFdEvents(int fd, short events);
-  size_t getFdCount() const;
+    static const int DEFAULT_TIMEOUT = 30000;
+
+    Poller() = default;
+    ~Poller() = default;
+
+    Poller(const Poller&) = delete;
+    Poller& operator=(const Poller&) = delete;
+
+    Poller(Poller&&) = default;
+    Poller& operator=(Poller&&) = default;
+
+    void add(int fd, short events);
+    void remove(int fd);
+    void update(int fd, short events);
+    std::vector<struct pollfd> poll(int timeout = DEFAULT_TIMEOUT);
+
+    void updateLastActivity(int fd);
+    bool hasTimedOut(int fd) const;
+    void removeTimedOutConnections();
+
+private:
+    std::vector<struct pollfd> _fds;
+    std::map<int, std::chrono::steady_clock::time_point> _lastActivity;
 };
