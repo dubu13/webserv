@@ -10,7 +10,7 @@ void signalHandler(int) {
     g_running = false;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     try {
 
         signal(SIGINT, signalHandler);
