@@ -20,4 +20,8 @@ public:
     const LocationBlock* findLocation(const std::string& uri) const;
     std::string resolveRoot(const std::string_view uri, const LocationBlock* location) const;
     bool isMethodAllowed(const Request& request, const LocationBlock* location) const;
+    
+    // Redirection support
+    bool hasRedirection(const LocationBlock* location) const;
+    std::string getRedirectionTarget(const LocationBlock* location) const;
 };

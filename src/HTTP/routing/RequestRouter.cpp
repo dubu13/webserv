@@ -85,10 +85,22 @@ std::string RequestRouter::resolveRoot(std::string_view uri, const LocationBlock
 
 bool RequestRouter::isMethodAllowed(const Request& request, const LocationBlock* location) const {
     if (!location || location->allowedMethods.empty()) {
-
         return true;
     }
 
     std::string methodStr = methodToString(request.requestLine.method);
     return location->allowedMethods.find(methodStr) != location->allowedMethods.end();
+}
+
+bool RequestRouter::hasRedirection(const LocationBlock* location) const {
+    return location && !location->redirection.empty();
+}
+
+std::string RequestRouter::getRedirectionTarget(const LocationBlock* location) const {
+    if (!location || location->redirection.empty()) {
+        return "";
+    }
+    
+    Logger::debugf("Found redirection target: %s", location->redirection.c_str());
+    return location->redirection;
 }
