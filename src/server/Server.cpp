@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <stdexcept>
+#include <atomic>
 
 #include "Server.hpp"
 #include "Logger.hpp"
@@ -21,6 +22,7 @@
 
 using HTTP::parseRequest;
 using HTTP::Request;
+extern std::atomic<bool> g_running;
 
 Server::Server(const ServerBlock* config)
     : _serverFd(-1)
@@ -37,39 +39,35 @@ Server::~Server() {
     }
 }
 
-bool Server::start() {
-    if (_serverFd < 0) {
-        setupSocket();
-    }
+// bool Server::start() {
+//     if (_serverFd < 0)
+//         setupSocket();
 
-    if (_serverFd < 0) {
-        return false;
-    }
+//     if (_serverFd < 0)
+//         return false;
 
-    _running = true;
+//     _running = true;
 
-    while (_running) {
-        auto activeFds = _poller.poll(1000);
+//     while (_running && g_running) {
+//         auto activeFds = _poller.poll(1000);
 
-        for (const auto& pfd : activeFds) {
-            if (pfd.fd == _serverFd) {
-                acceptConnection();
-            } else {
-                handleClient(pfd.fd);
-            }
-        }
+//         for (const auto& pfd : activeFds) {
+            
+//             if (pfd.fd == _serverFd) {
+//                 acceptConnection();
+//             } else
+//                 handleClient(pfd.fd);
+//         }
+//         checkTimeouts();
+//     }
+//     return true;
+// }
 
-        checkTimeouts();
-    }
-
-    return true;
-}
-
-void Server::setupSocket() {
+int Server::setupSocket() {
     _serverFd = socket(AF_INET, SOCK_STREAM, 0);
     if (_serverFd < 0) {
         Logger::error("Failed to create socket");
-        return;
+        return -1;
     }
 
     int opt = 1;
@@ -77,7 +75,7 @@ void Server::setupSocket() {
         Logger::error("Failed to set socket options");
         close(_serverFd);
         _serverFd = -1;
-        return;
+        return -1;
     }
 
     int flags = fcntl(_serverFd, F_GETFL, 0);
@@ -85,7 +83,7 @@ void Server::setupSocket() {
         Logger::error("Failed to set non-blocking mode");
         close(_serverFd);
         _serverFd = -1;
-        return;
+        return -1;
     }
 
     struct sockaddr_in addr;
@@ -98,17 +96,16 @@ void Server::setupSocket() {
         Logger::error("Failed to bind socket");
         close(_serverFd);
         _serverFd = -1;
-        return;
+        return -1;
     }
 
     if (listen(_serverFd, SOMAXCONN) < 0) {
         Logger::error("Failed to listen on socket");
         close(_serverFd);
         _serverFd = -1;
-        return;
-    }
-
-    _poller.add(_serverFd, POLLIN);
+        return -1;
+    }    
+    return _serverFd;
 }
 
 void Server::acceptConnection() {

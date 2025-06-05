@@ -23,13 +23,19 @@ public:
     explicit Server(const ServerBlock* config);
     ~Server();
 
-    bool start();
+    // Changed to return file descriptor
+    int setupSocket();
     void stop() { _running = false; }
-
-private:
-    void setupSocket();
+    
+    // Methods that ServerManager will call
     void acceptConnection();
     void handleClient(int fd);
-    void removeClient(int fd);
     void checkTimeouts();
+    
+    // Added for client lookup
+    bool hasClient(int fd) const { return _clients.find(fd) != _clients.end(); }
+    void closeClient(int fd) { removeClient(fd); }
+
+private:
+    void removeClient(int fd);
 };
