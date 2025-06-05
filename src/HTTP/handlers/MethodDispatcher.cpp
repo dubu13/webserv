@@ -37,23 +37,25 @@ std::string MethodHandler::handleRequest(const Request& request, std::string_vie
     }
 }
 
-std::string MethodHandler::handleGet(const Request& request, std::string_view root, [[maybe_unused]] const RequestRouter* router) {
-    std::string effectiveRoot = root.empty() ? "./www" : std::string(root);
-    std::string uri = request.requestLine.uri;
-    std::string filePath = HttpUtils::buildPath(effectiveRoot, uri);
+std::pair<std::string, std::string> MethodHandler::resolvePaths(const Request& request, std::string_view root) {
+    std::string effectiveRoot = HttpUtils::getEffectiveRoot(root);
+    std::string filePath = HttpUtils::buildPath(effectiveRoot, request.requestLine.uri);
+    return {effectiveRoot, filePath};
+}
 
+std::string MethodHandler::handleGet(const Request& request, std::string_view root, [[maybe_unused]] const RequestRouter* router) {
+    auto [effectiveRoot, filePath] = resolvePaths(request, root);
+    
     CGIHandler cgiHandler(effectiveRoot);
     if (cgiHandler.canHandle(filePath)) {
-        return cgiHandler.executeCGI(uri, request);
+        return cgiHandler.executeCGI(request.requestLine.uri, request);
     }
 
-    return StaticFileHandler::handleRequest(effectiveRoot, uri);
+    return StaticFileHandler::handleRequest(effectiveRoot, request.requestLine.uri);
 }
 
 std::string MethodHandler::handlePost(const Request& request, std::string_view root, [[maybe_unused]] const RequestRouter* router) {
-
-    std::string effectiveRoot = root.empty() ? "./www" : std::string(root);
-    std::string filePath = HttpUtils::buildPath(effectiveRoot, request.requestLine.uri);
+    auto [effectiveRoot, filePath] = resolvePaths(request, root);
 
     auto contentTypeIt = request.headers.find("Content-Type");
     if (contentTypeIt != request.headers.end()) {
@@ -73,32 +75,39 @@ std::string MethodHandler::handlePost(const Request& request, std::string_view r
                 Logger::error("Failed to parse multipart form data");
                 return ErrorResponseBuilder::buildResponse(400);
             }
-            const auto& file = files[0];
-            std::string filename = file.filename.empty() ? 
-                "upload_" + std::to_string(std::time(nullptr)) : file.filename;
-            std::string fullPath = HttpUtils::buildPath(uploadPath, filename);
-            std::ofstream outFile(fullPath, std::ios::binary);
-            if (!outFile.is_open()) {
-                Logger::errorf("Failed to open file for writing: %s", fullPath.c_str());
-                return ErrorResponseBuilder::buildResponse(500);
+
+            std::string uploadedFiles;
+            for (const auto& file : files) {
+                std::string filename = file.filename.empty() ?
+                    "upload_" + std::to_string(std::time(nullptr)) : file.filename;
+                std::string fullPath = HttpUtils::buildPath(uploadPath, filename);
+
+                if (!uploadedFiles.empty()) {
+                    uploadedFiles += ", ";
+                }
+                uploadedFiles += filename;
+
+                std::ofstream outFile(fullPath, std::ios::binary);
+                if (!outFile.is_open()) {
+                    Logger::logf<LogLevel::ERROR>("Failed to open file for writing: %s", fullPath.c_str());
+                    return ErrorResponseBuilder::buildResponse(500);
+                }
+                outFile.write(file.content.data(), file.content.size());
+                outFile.close();
+                if (!outFile.good()) {
+                    Logger::logf<LogLevel::ERROR>("Failed to write uploaded file: %s", fullPath.c_str());
+                    return ErrorResponseBuilder::buildResponse(500);
+                }
+                Logger::logf<LogLevel::INFO>("File uploaded successfully: %s (%zu bytes)", fullPath.c_str(), file.content.size());
             }
-            outFile.write(file.content.data(), file.content.size());
-            outFile.close();
-            if (!outFile.good()) {
-                Logger::errorf("Failed to write uploaded file: %s", fullPath.c_str());
-                return ErrorResponseBuilder::buildResponse(500);
-            }
-            Logger::infof("File uploaded successfully: %s (%zu bytes)", fullPath.c_str(), file.content.size());
-            return HttpResponse::ok("File uploaded successfully: " + filename, "text/plain");
+            return HttpResponse::ok("Files uploaded successfully: " + uploadedFiles, "text/plain");
         }
     }
     return ErrorResponseBuilder::buildResponse(400);
 }
 
 std::string MethodHandler::handleDelete(const Request& request, std::string_view root, [[maybe_unused]] const RequestRouter* router) {
-
-    std::string effectiveRoot = root.empty() ? "./www" : std::string(root);
-    std::string filePath = HttpUtils::buildPath(effectiveRoot, request.requestLine.uri);
+    auto [effectiveRoot, filePath] = resolvePaths(request, root);
 
     if (!FileUtils::exists(filePath)) {
         return ErrorResponseBuilder::buildResponse(404);
@@ -110,6 +119,6 @@ std::string MethodHandler::handleDelete(const Request& request, std::string_view
         return ErrorResponseBuilder::buildResponse(500);
     }
 
-    Logger::infof("File deleted successfully: %s", filePath.c_str());
+    Logger::logf<LogLevel::INFO>("File deleted successfully: %s", filePath.c_str());
     return HttpResponse::ok("File deleted successfully", "text/plain");
 }

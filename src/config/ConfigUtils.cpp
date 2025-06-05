@@ -1,13 +1,12 @@
 #include "config/ConfigUtils.hpp"
 #include "utils/Utils.hpp"
+#include "utils/ValidationUtils.hpp"
 #include <sstream>
 #include <algorithm>
 #include <cctype>
 #include <stdexcept>
 #include <arpa/inet.h>
 #include <string_view>
-
-
 
 std::vector<std::string> ConfigUtils::splitWhitespace(const std::string& str) {
     std::vector<std::string> tokens;
@@ -100,6 +99,12 @@ size_t ConfigUtils::parseSize(const std::string& value) {
     }
 }
 
+bool ConfigUtils::parseBooleanValue(const std::string& value) {
+    std::string lower = value;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    return lower == "on" || lower == "true" || lower == "yes" || lower == "1";
+}
+
 std::pair<std::string, int> ConfigUtils::parseListenDirective(const std::string& value) {
     std::istringstream iss(value);
     std::string token;
@@ -176,10 +181,12 @@ bool ConfigUtils::isValidIPv4(const std::string& ip) {
 }
 
 bool ConfigUtils::isValidMethod(const std::string& method) {
-    static const std::vector<std::string> validMethods = {
-        "GET", "POST", "DELETE", "PUT", "HEAD", "OPTIONS", "PATCH"
+    // Use HTTP::stringToMethod for consistent validation
+    // Config allows additional methods like PUT, HEAD, OPTIONS, PATCH
+    static const std::vector<std::string> configValidMethods = {
+        "GET", "POST", "DELETE"
     };
-    return std::find(validMethods.begin(), validMethods.end(), method) != validMethods.end();
+    return std::find(configValidMethods.begin(), configValidMethods.end(), method) != configValidMethods.end();
 }
 
 bool ConfigUtils::isValidServerName(const std::string& name) {
@@ -207,10 +214,12 @@ bool ConfigUtils::isValidPath(const std::string& path) {
         return false;
     }
 
-    if (path.find('\0') != std::string::npos) {
+    // Use ValidationUtils for consistent path safety checks
+    if (!ValidationUtils::isPathSafe(path)) {
         return false;
     }
 
+    // Additional config-specific validation: limit excessive directory traversal
     size_t pos = 0;
     int dotdot_count = 0;
     while ((pos = path.find("../", pos)) != std::string::npos) {

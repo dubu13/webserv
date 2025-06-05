@@ -2,6 +2,7 @@
 #include "HTTP/core/HttpResponse.hpp"
 #include "HTTP/core/ErrorResponseBuilder.hpp"
 #include "utils/Utils.hpp"
+#include "utils/ValidationUtils.hpp"
 #include "utils/Logger.hpp"
 #include <filesystem>
 
@@ -9,17 +10,16 @@ using HTTP::StatusCode;
 
 std::string StaticFileHandler::handleRequest(std::string_view root, std::string_view uri) {
 
-    std::string effectiveRoot = root.empty() ? "./www" : std::string(root);
+    std::string effectiveRoot = HttpUtils::getEffectiveRoot(root);
     std::string normalizedUri = uri.empty() ? "/" : std::string(uri);
     std::string filePath = HttpUtils::buildPath(effectiveRoot, normalizedUri);
 
-
-    if (!HttpUtils::isPathSafe(normalizedUri)) {
-        Logger::warnf("Unsafe path detected: %s", normalizedUri.c_str());
+    if (!ValidationUtils::isPathSafe(normalizedUri)) {
+        Logger::logf<LogLevel::WARN>("Unsafe path detected: %s", normalizedUri.c_str());
         return ErrorResponseBuilder::buildResponse(400);
     }
 
-    if (!std::filesystem::exists(filePath)) {
+    if (!FileUtils::exists(filePath)) {
         return ErrorResponseBuilder::buildResponse(404);
     }
 
@@ -51,7 +51,6 @@ std::string StaticFileHandler::serveDirectory(std::string_view dirPath, std::str
         return serveFile(indexPath);
     }
 
-
     if (requestUri == "/") {
         return generateWelcomePage();
     }
@@ -64,7 +63,7 @@ std::string StaticFileHandler::findIndexFile(std::string_view dirPath) {
 
     for (const char** indexFile = indexFiles; *indexFile; ++indexFile) {
         std::string indexPath = std::string(dirPath) + "/" + *indexFile;
-        if (std::filesystem::exists(indexPath) && !std::filesystem::is_directory(indexPath)) {
+        if (FileUtils::exists(indexPath) && !std::filesystem::is_directory(indexPath)) {
             return indexPath;
         }
     }

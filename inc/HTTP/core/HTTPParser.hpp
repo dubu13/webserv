@@ -30,20 +30,18 @@ namespace HTTP {
     bool parseRequest(const std::string& data, Request& request);
     bool parseRequestLine(std::string_view line, RequestLine& requestLine);
     bool parseHeaders(std::istringstream& stream, std::map<std::string, std::string>& headers);
-    bool parseHeaders(std::string_view headerSection, std::map<std::string, std::string>& headers);
     bool parseHeader(std::string_view line, std::map<std::string, std::string>& headers);
     bool parseBody(std::string_view data, size_t bodyStart, std::string& body);
     bool parseChunkedBody(std::string_view data, size_t bodyStart, std::string& body);
     bool parseRequestBody(const std::string& data, size_t bodyStart, Request& request);
     bool parseContentLength(Request& request);
     bool validateHttpRequest(const Request& request);
-    
-    // Multipart data parsing
+
     struct MultipartFile {
         std::string filename;
         std::string content;
     };
-    
+
     std::vector<MultipartFile> parseMultipartData(const std::string& body, std::string_view contentType);
 
 }

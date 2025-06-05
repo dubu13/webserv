@@ -1,4 +1,6 @@
 #include "utils/Utils.hpp"
+#include "utils/ValidationUtils.hpp"
+#include "utils/Constants.hpp"
 #include "utils/FileCache.ipp"
 #include "utils/Logger.hpp"
 #include <fstream>
@@ -16,27 +18,16 @@
 
 using HTTP::StatusCode;
 
-static FileCache fileCache(100);
+static FileCache fileCache(Constants::DEFAULT_CACHE_SIZE);
 
-std::string FileUtils::readFile(std::string_view rootDir, std::string_view uri, StatusCode &status) {
-    std::string filePath;
-
-    if (!rootDir.empty()) {
-
-        filePath = HttpUtils::buildPath(rootDir, uri);
-    } else {
-
-        filePath = std::string(uri);
-    }
-
-
+static std::string readFileFromPath(const std::string& filePath, StatusCode& status) {
     std::string content, mimeType;
     if (fileCache.getFile(filePath, content, mimeType)) {
         status = StatusCode::OK;
         return content;
     }
 
-    if (!std::filesystem::exists(filePath)) {
+    if (!FileUtils::exists(filePath)) {
         status = StatusCode::NOT_FOUND;
         return "";
     }
@@ -51,32 +42,33 @@ std::string FileUtils::readFile(std::string_view rootDir, std::string_view uri, 
                           std::istreambuf_iterator<char>());
     file.close();
 
-    if (content.empty()) {
-    } else {
-    }
-
     fileCache.cacheFile(filePath, content, FileUtils::getMimeType(filePath));
     status = StatusCode::OK;
     return content;
 }
 
+std::string FileUtils::readFile(std::string_view rootDir, std::string_view uri, StatusCode &status) {
+    if (!rootDir.empty()) {
+        auto validation = ValidationUtils::validateFileAccess(rootDir, uri);
+        if (!validation.isValid) {
+            status = validation.status;
+            return "";
+        }
+        return readFileFromPath(validation.filePath, status);
+    } else {
+        return readFileFromPath(std::string(uri), status);
+    }
+}
+
 bool FileUtils::writeFile(std::string_view rootDir, std::string_view uri, std::string_view content, StatusCode &status) {
-    const std::string filePath = HttpUtils::buildPath(rootDir, uri);
-
-    if (!HttpUtils::isPathSafe(uri)) {
-        status = StatusCode::FORBIDDEN;
+    auto validation = ValidationUtils::validateFileAccess(rootDir, uri);
+    if (!validation.isValid) {
+        status = validation.status;
         return false;
     }
-
-    std::ofstream file(filePath, std::ios::binary);
-    if (!file.is_open()) {
-        status = StatusCode::INTERNAL_SERVER_ERROR;
-        return false;
-    }
-
-    file << content;
-    if (file.good()) {
-        fileCache.cacheFile(filePath, std::string(content), "text/html");
+    
+    if (writeFileContent(validation.filePath, content)) {
+        fileCache.cacheFile(validation.filePath, std::string(content), "text/html");
         status = StatusCode::CREATED;
         return true;
     }
@@ -86,15 +78,14 @@ bool FileUtils::writeFile(std::string_view rootDir, std::string_view uri, std::s
 }
 
 bool FileUtils::deleteFile(std::string_view rootDir, std::string_view uri, StatusCode &status) {
-    const std::string filePath = HttpUtils::buildPath(rootDir, uri);
-
-    if (!HttpUtils::isPathSafe(uri)) {
-        status = StatusCode::FORBIDDEN;
+    auto validation = ValidationUtils::validateFileAccess(rootDir, uri);
+    if (!validation.isValid) {
+        status = validation.status;
         return false;
     }
 
     struct stat fileStat;
-    if (stat(filePath.c_str(), &fileStat) != 0) {
+    if (stat(validation.filePath.c_str(), &fileStat) != 0) {
         status = StatusCode::NOT_FOUND;
         return false;
     }
@@ -104,20 +95,13 @@ bool FileUtils::deleteFile(std::string_view rootDir, std::string_view uri, Statu
         return false;
     }
 
-    if (unlink(filePath.c_str()) == 0) {
+    if (unlink(validation.filePath.c_str()) == 0) {
         status = StatusCode::NO_CONTENT;
         return true;
     }
 
     status = StatusCode::INTERNAL_SERVER_ERROR;
     return false;
-}
-
-std::optional<size_t> FileUtils::fileExists(std::string_view rootDir, std::string_view uri) {
-    const std::string filePath = HttpUtils::buildPath(rootDir, uri);
-    struct stat fileStat;
-    return (stat(filePath.c_str(), &fileStat) == 0) ?
-           std::make_optional(fileStat.st_size) : std::nullopt;
 }
 
 bool FileUtils::isDirectory(std::string_view path) {
@@ -149,7 +133,7 @@ std::string FileUtils::generateDirectoryListing(std::string_view dirPath, std::s
         std::string name = entry->d_name;
         if (name == "." || name == "..") continue;
 
-        std::string fullPath = std::string(dirPath) + "/" + name;
+        std::string fullPath = HttpUtils::buildPath(dirPath, name);
         entries.emplace_back(name, FileUtils::isDirectory(fullPath));
     }
     closedir(dir);
@@ -180,8 +164,7 @@ std::optional<std::string> FileUtils::readFileContent(std::string_view filePath)
 bool FileUtils::writeFileContent(std::string_view filePath, std::string_view content) {
     std::ofstream file(std::string(filePath), std::ios::binary);
     if (!file.is_open()) return false;
-    
-    // Use write for binary data instead of << operator
+
     file.write(content.data(), content.size());
     file.close();
     return file.good();
@@ -210,26 +193,33 @@ bool FileUtils::createDirectories(std::string_view path) {
 
 std::string FileUtils::getMimeType(std::string_view filePath) {
     size_t dotPos = filePath.find_last_of('.');
-    if (dotPos == std::string::npos) {
+    if (dotPos == std::string::npos || dotPos == filePath.length() - 1) {
         return "application/octet-stream";
     }
 
-    std::string extension = std::string(filePath.substr(dotPos));
+    std::string extension = std::string(filePath.substr(dotPos + 1));
     std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
-    if (extension == ".html" || extension == ".htm") return "text/html; charset=utf-8";
-    if (extension == ".css") return "text/css";
-    if (extension == ".js") return "application/javascript";
-    if (extension == ".json") return "application/json";
+    static const std::unordered_map<std::string_view, std::string_view> extensionToMimeMap = {
+        {"html", "text/html; charset=utf-8"},
+        {"htm", "text/html; charset=utf-8"},
+        {"css", "text/css"},
+        {"js", "application/javascript"},
+        {"json", "application/json"},
+        {"txt", "text/plain; charset=utf-8"},
+        {"png", "image/png"},
+        {"jpg", "image/jpeg"},
+        {"jpeg", "image/jpeg"},
+        {"gif", "image/gif"},
+        {"pdf", "application/pdf"},
+        {"ico", "image/x-icon"},
+        {"svg", "image/svg+xml"},
+        {"xml", "application/xml"},
+        {"zip", "application/zip"},
+        {"mp3", "audio/mpeg"},
+        {"mp4", "video/mp4"}
+    };
 
-    if (extension == ".png") return "image/png";
-    if (extension == ".jpg" || extension == ".jpeg") return "image/jpeg";
-    if (extension == ".gif") return "image/gif";
-    if (extension == ".svg") return "image/svg+xml";
-    if (extension == ".ico") return "image/x-icon";
-
-    if (extension == ".txt") return "text/plain; charset=utf-8";
-    if (extension == ".xml") return "application/xml";
-
-    return "application/octet-stream";
+    auto it = extensionToMimeMap.find(extension);
+    return (it != extensionToMimeMap.end()) ? std::string(it->second) : "application/octet-stream";
 }

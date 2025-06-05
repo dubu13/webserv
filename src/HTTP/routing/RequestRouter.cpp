@@ -9,42 +9,9 @@ const LocationBlock* RequestRouter::findLocation(const std::string& uri) const {
         return nullptr;
     }
 
-
-    std::string cleanUri = HttpUtils::sanitizePath(uri);
-
-    if (cleanUri == "/") {
-        auto it = _config->locations.find("/");
-        if (it != _config->locations.end()) {
-            return &it->second;
-        }
-        return nullptr;
-    }
-
-    const LocationBlock* bestMatch = nullptr;
-    size_t bestMatchLength = 0;
-
-
-    for (const auto& [prefix, location] : _config->locations) {
-
-        if (prefix == "/" && cleanUri != "/") {
-            continue;
-        }
-        if (cleanUri.find(prefix) == 0) {
-            if (prefix.length() > 1 &&
-                cleanUri.length() > prefix.length() &&
-                cleanUri[prefix.length()] != '/') {
-                continue;
-            }
-
-            if (prefix.length() > bestMatchLength) {
-                bestMatch = &location;
-                bestMatchLength = prefix.length();
-            }
-        }
-    }
-
-    return bestMatch;
+    return _config->getLocation(uri);
 }
+
 
 std::string RequestRouter::resolveRoot(const LocationBlock* location) const {
 
@@ -76,7 +43,7 @@ std::string RequestRouter::getRedirectionTarget(const LocationBlock* location) c
     if (!location || location->redirection.empty()) {
         return "";
     }
-    
+
     return location->redirection;
 }
 std::string RequestRouter::handleRedirection(const LocationBlock* location) const {
@@ -94,7 +61,7 @@ std::string RequestRouter::handleRedirection(const LocationBlock* location) cons
         try {
             int parsedCode = std::stoi(codeStr);
 
-            if (parsedCode == 301 || parsedCode == 302 || 
+            if (parsedCode == 301 || parsedCode == 302 ||
                 parsedCode == 303 || parsedCode == 307 || parsedCode == 308) {
                 code = parsedCode;
                 redirectUrl = target.substr(spacePos + 1);

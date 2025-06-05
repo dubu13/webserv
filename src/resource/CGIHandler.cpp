@@ -1,16 +1,17 @@
 #include "CGIHandler.hpp"
 #include "HTTP/core/HttpResponse.hpp"
+#include "HTTP/core/ErrorResponseBuilder.hpp"
 #include "utils/Logger.hpp"
+#include "utils/Utils.hpp"
 
 using HTTP::Request;
 using HTTP::Method;
 using HTTP::StatusCode;
 using HTTP::methodToString;
 using HTTP::statusToString;
-using HTTP::getMimeType;
 
 CGIHandler::CGIHandler(const std::string &root) : _root_directory(root) {
-  Logger::infof("CGIHandler initialized with root directory: %s", root.c_str());
+  Logger::logf<LogLevel::INFO>("CGIHandler initialized with root directory: %s", root.c_str());
   registerHandler(".php", "/usr/bin/php");
   registerHandler(".py", "/usr/bin/python3");
   registerHandler(".pl", "/usr/bin/perl");
@@ -47,14 +48,14 @@ std::string CGIHandler::executeScript(const std::string &script_path,
 
   int pipefd[2];
   if (pipe(pipefd) == -1)
-    return HttpResponse::internalError(std::string_view("Failed to create pipe"));
+    return ErrorResponseBuilder::buildResponse(500);
 
   int input_pipe[2] = {-1, -1};
   if (request.requestLine.method == Method::POST && !request.body.empty()) {
     if (pipe(input_pipe) == -1) {
       close(pipefd[0]);
       close(pipefd[1]);
-      return HttpResponse::internalError(std::string_view("Failed to create input pipe"));
+      return ErrorResponseBuilder::buildResponse(500);
     }
   }
 
@@ -67,7 +68,7 @@ std::string CGIHandler::executeScript(const std::string &script_path,
       close(input_pipe[0]);
       close(input_pipe[1]);
     }
-    return HttpResponse::internalError(std::string_view("Fork failed"));
+    return ErrorResponseBuilder::buildResponse(500);
   }
 
   if (pid == 0) {
@@ -128,7 +129,7 @@ std::string CGIHandler::executeScript(const std::string &script_path,
   waitpid(pid, &status, 0);
 
   if (WIFEXITED(status) && WEXITSTATUS(status) != 0)
-    return HttpResponse::internalError("CGI script execution failed with status: " + std::to_string(WEXITSTATUS(status)));
+    return ErrorResponseBuilder::buildResponse(500);
 
   return parseCGIOutput(output.str());
 }
@@ -143,7 +144,7 @@ std::string CGIHandler::parseCGIOutput(const std::string& output){
   }
 
   if (header_end == std::string::npos)
-    return HttpResponse::internalError("CGI output doesn't have valid headers");
+    return ErrorResponseBuilder::buildResponse(500);
 
   std::string header_section = output.substr(0, header_end);
   std::string body = output.substr(header_end + header_separator_len);
@@ -168,7 +169,7 @@ std::string CGIHandler::parseCGIOutput(const std::string& output){
           int status_num = std::stoi(value.substr(0, 3));
           status_code = static_cast<StatusCode>(status_num);
         } catch (...) {
-          return HttpResponse::internalError("Invalid status code in CGI output");
+          return ErrorResponseBuilder::buildResponse(500);
         }
       }
       else
@@ -176,24 +177,18 @@ std::string CGIHandler::parseCGIOutput(const std::string& output){
     }
   }
   if (headers.find("Content-Type") == headers.end())
-    headers["Content-Type"] = getMimeType(body);
+    headers["Content-Type"] = FileUtils::getMimeType(body);
 
-  std::string response = HttpResponse::buildResponse(
-    static_cast<int>(status_code),
-    std::string(statusToString(status_code)),
-    std::string_view(body),
-    std::string_view(headers["Content-Type"]));
-
+  HttpResponse response;
+  response.status(static_cast<int>(status_code), statusToString(status_code))
+          .body(body, headers["Content-Type"]);
   for (const auto& header : headers) {
     if (header.first != "Content-Type") {
-      size_t headerPos = response.find("\r\n\r\n");
-      if (headerPos != std::string::npos) {
-        response.insert(headerPos, "\r\n" + header.first + ": " + header.second);
-      }
+      response.header(header.first, header.second);
     }
   }
 
-  return response;
+  return response.str();
 }
 
 void CGIHandler::registerHandler(const std::string &extension, const std::string &handlerPath) {

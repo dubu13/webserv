@@ -27,7 +27,7 @@ Server::Server(const ServerBlock* config)
     , _running(false)
     , _config(config)
     , _router(config) {
-    // Set the config for ErrorResponseBuilder to use custom error pages
+
     ErrorResponseBuilder::setCurrentConfig(config);
 }
 
@@ -140,29 +140,26 @@ void Server::handleClient(int fd) {
 
     if (bytesRead <= 0) {
         if (bytesRead < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            return; // Would block, try again later
+            return;
         }
         removeClient(fd);
         return;
     }
 
     buffer[bytesRead] = '\0';
-    
-    // Accumulate data in client buffer
+
     _clientBuffers[fd] += std::string(buffer, bytesRead);
-    
-    // Update client activity timestamp
+
     _clients[fd] = std::time(nullptr);
-    
-    // Check if we have a complete request
+
     if (!HttpUtils::isCompleteRequest(_clientBuffers[fd])) {
-        return; // Wait for more data
+        return;
     }
 
     try {
         Request request;
         if (!parseRequest(_clientBuffers[fd], request)) {
-            // Use ErrorResponseBuilder for proper 400 response
+
             std::string errorResponse = ErrorResponseBuilder::buildResponse(400);
             send(fd, errorResponse.c_str(), errorResponse.length(), MSG_NOSIGNAL);
             removeClient(fd);
@@ -173,22 +170,21 @@ void Server::handleClient(int fd) {
         if (_config && !_config->root.empty()) {
             root = _config->root;
         }
-        
+
         std::string responseStr = MethodHandler::handleRequest(request, root, &_router);
-        
-        // Ensure Connection: close header is added
+
         if (responseStr.find("Connection:") == std::string::npos) {
             size_t headerEnd = responseStr.find("\r\n\r\n");
             if (headerEnd != std::string::npos) {
                 responseStr.insert(headerEnd, "\r\nConnection: close");
             }
         }
-        
+
         send(fd, responseStr.c_str(), responseStr.length(), MSG_NOSIGNAL);
-        removeClient(fd); // Always close after response for now
+        removeClient(fd);
 
     } catch (const std::exception& e) {
-        Logger::errorf("Error handling client: %s", e.what());
+        Logger::logf<LogLevel::ERROR>("Error handling client: %s", e.what());
         std::string errorResponse = ErrorResponseBuilder::buildResponse(500);
         send(fd, errorResponse.c_str(), errorResponse.length(), MSG_NOSIGNAL);
         removeClient(fd);
@@ -198,9 +194,9 @@ void Server::handleClient(int fd) {
 void Server::removeClient(int fd) {
     _poller.remove(fd);
     _clients.erase(fd);
-    _clientBuffers.erase(fd); // Clean up buffer
+    _clientBuffers.erase(fd);
     close(fd);
-    Logger::warnf("Client removed: fd=%d", fd);
+    Logger::logf<LogLevel::WARN>("Client removed: fd=%d", fd);
 }
 
 void Server::checkTimeouts() {
@@ -211,13 +207,12 @@ void Server::checkTimeouts() {
     while (it != _clients.end()) {
         if (now - it->second > timeout) {
             int fd = it->first;
-            
-            // Send proper timeout response before closing
+
             std::string timeoutResponse = ErrorResponseBuilder::buildResponse(408);
             send(fd, timeoutResponse.c_str(), timeoutResponse.length(), MSG_NOSIGNAL);
-            
+
             it = _clients.erase(it);
-            _clientBuffers.erase(fd); // Clean up buffer
+            _clientBuffers.erase(fd);
             _poller.remove(fd);
             close(fd);
         } else {

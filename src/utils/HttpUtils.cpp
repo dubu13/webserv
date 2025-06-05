@@ -1,4 +1,5 @@
 #include "utils/Utils.hpp"
+#include "utils/ValidationUtils.hpp"
 #include "utils/Logger.hpp"
 #include "HTTP/core/HTTPParser.hpp"
 #include <algorithm>
@@ -7,6 +8,10 @@
 #include <cstdlib>
 #include <map>
 #include <filesystem>
+
+std::string HttpUtils::getEffectiveRoot(std::string_view root) {
+    return root.empty() ? "./www" : std::string(root);
+}
 
 std::string_view HttpUtils::trimWhitespace(std::string_view str) {
     const char* whitespace = " \t\r\n";
@@ -73,7 +78,7 @@ bool HttpUtils::parseChunkSize(std::string_view data, size_t& pos, size_t& chunk
         return false;
     }
 
-    if (!validateChunkSize(chunkSize)) {
+    if (!ValidationUtils::validateChunkSize(chunkSize)) {
         return false;
     }
 
@@ -89,60 +94,6 @@ bool HttpUtils::findChunkEnd(std::string_view data, size_t& pos) {
     }
     pos = end + 2;
     return true;
-}
-
-bool HttpUtils::validateChunkTerminator(std::string_view data, size_t pos) {
-    if (pos + 1 >= data.length() || data[pos] != '\r' || data[pos + 1] != '\n') {
-        Logger::error("HTTP/1.1 Error: Invalid chunk terminator");
-        return false;
-    }
-    return true;
-}
-
-bool HttpUtils::validateLimit(size_t value, size_t limit, const char* errorMsg) {
-    if (value > limit) {
-        Logger::error(errorMsg);
-        return false;
-    }
-    return true;
-}
-
-bool HttpUtils::validateContentLength(const std::string& length, size_t& result) {
-    try {
-        result = std::stoull(length);
-        if (!validateBodySize(result)) {
-            return false;
-        }
-        return true;
-    } catch (...) {
-        Logger::error("HTTP/1.1 Error: Invalid Content-Length format");
-        return false;
-    }
-}
-
-bool HttpUtils::validateBodySize(size_t size) {
-    return validateLimit(size, Limits::MAX_TOTAL_SIZE,
-                     "HTTP/1.1 Error: Body size too large (max 10MB)");
-}
-
-bool HttpUtils::validateChunkCount(size_t count) {
-    return validateLimit(count, Limits::MAX_CHUNKS,
-                     "HTTP/1.1 Error: Too many chunks (max 1024)");
-}
-
-bool HttpUtils::validateChunkSize(size_t size) {
-    return validateLimit(size, Limits::MAX_CHUNK_SIZE,
-                     "HTTP/1.1 Error: Chunk size too large (max 1MB)");
-}
-
-bool HttpUtils::validateHeaderLength(size_t length) {
-    return validateLimit(length, Limits::MAX_HEADER_SIZE,
-                     "HTTP/1.1 Error: Headers too large (max 8KB)");
-}
-
-bool HttpUtils::validateUriLength(size_t length) {
-    return validateLimit(length, Limits::MAX_URI_LENGTH,
-                     "HTTP/1.1 Error: URI too long (max 2KB)");
 }
 
 bool HttpUtils::isCompleteRequest(const std::string& data) {
@@ -175,14 +126,6 @@ bool HttpUtils::isCompleteRequest(const std::string& data) {
     return true;
 }
 
-bool HttpUtils::validateHeaderSize(const std::string& data, size_t maxSize) {
-    size_t headerEnd = data.find("\r\n\r\n");
-    if (headerEnd == std::string::npos) {
-        return data.length() <= maxSize;
-    }
-    return headerEnd <= maxSize;
-}
-
 bool HttpUtils::isSecureRequest(const std::string& data) {
 
     size_t firstLine = data.find("\r\n");
@@ -197,63 +140,21 @@ bool HttpUtils::isSecureRequest(const std::string& data) {
 }
 
 std::string HttpUtils::sanitizePath(std::string_view path) {
-    if (path.empty()) {
-        return "/";
-    }
-
-    std::string result(path);
-    if (result[0] != '/') {
-        result = "/" + result;
-    }
-
-    size_t pos = 0;
-    while ((pos = result.find("//", pos)) != std::string::npos) {
-        result.replace(pos, 2, "/");
-    }
-
-    std::vector<std::string> components;
-    std::istringstream iss(result);
-    std::string component;
-
-    while (std::getline(iss, component, '/')) {
-        if (component.empty() || component == ".") {
-            continue;
+    if (path.empty()) return "/";
+    
+    try {
+        std::filesystem::path fsPath(path);
+        fsPath = fsPath.lexically_normal();
+        
+        std::string result = fsPath.string();
+        if (result.empty() || result[0] != '/') {
+            result = "/" + result;
         }
-        if (component == "..") {
-            if (!components.empty()) {
-                components.pop_back();
-            }
-        } else {
-            components.push_back(component);
-        }
+        
+        return result;
+    } catch (const std::exception&) {
+        return "/";  // Fallback for invalid paths
     }
-
-    result = "/";
-    for (size_t i = 0; i < components.size(); ++i) {
-        if (i > 0) result += "/";
-        result += components[i];
-    }
-
-    return result;
-}
-
-bool HttpUtils::isPathSafe(std::string_view path) {
-    std::string pathStr(path);
-
-    if (pathStr.find("../") != std::string::npos ||
-        pathStr.find("..\\") != std::string::npos ||
-        pathStr.find("/..") != std::string::npos ||
-        pathStr.find("\\..") != std::string::npos) {
-        Logger::warnf("Path contains directory traversal: %s", pathStr.c_str());
-        return false;
-    }
-
-    if (pathStr.find('\0') != std::string::npos) {
-        Logger::warnf("Path contains null byte: %s", pathStr.c_str());
-        return false;
-    }
-
-    return true;
 }
 
 std::string HttpUtils::buildPath(std::string_view root, std::string_view path) {

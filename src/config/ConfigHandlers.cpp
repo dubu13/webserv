@@ -1,5 +1,6 @@
 #include "config/Config.hpp"
 #include "config/ConfigUtils.hpp"
+#include "utils/ValidationUtils.hpp"
 
 void Config::initializeHandlers() {
     initializeServerHandlers();
@@ -98,7 +99,7 @@ void Config::handleMethods(const std::string& value, LocationBlock& location) {
 }
 
 void Config::handleAutoindex(const std::string& value, LocationBlock& location) {
-    location.autoindex = (value == "on" || value == "true");
+    location.autoindex = ConfigUtils::parseBooleanValue(value);
 }
 
 void Config::handleUploadStore(const std::string& value, LocationBlock& location) {

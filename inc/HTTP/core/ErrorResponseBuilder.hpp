@@ -7,9 +7,8 @@ public:
     static void setCurrentConfig(const ServerBlock* config);
     static std::string buildResponse(int statusCode);
     static std::string buildDefaultError(int statusCode);
-    
+
 private:
-    static std::string getStatusText(int statusCode);
     static std::string loadCustomErrorPage(int statusCode);
     static const ServerBlock* _currentConfig;
 };
