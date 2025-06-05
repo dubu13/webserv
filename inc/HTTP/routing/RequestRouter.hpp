@@ -19,7 +19,7 @@ public:
     explicit RequestRouter(const ServerBlock* config);
 
     const LocationBlock* findLocation(const std::string& uri) const;
-    std::string resolveRoot(const std::string_view uri, const LocationBlock* location) const;
+    std::string resolveRoot(const LocationBlock* location) const;
     bool isMethodAllowed(const Request& request, const LocationBlock* location) const;
     
     // Redirection support
@@ -28,4 +28,7 @@ public:
     
     // Consolidated method for handling redirection
     std::string handleRedirection(const LocationBlock* location) const;
+    
+    // Getter for config to use in error responses
+    const ServerBlock* getConfig() const { return _config; }
 };

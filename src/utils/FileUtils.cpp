@@ -24,31 +24,25 @@ std::string FileUtils::readFile(std::string_view rootDir, std::string_view uri, 
     if (!rootDir.empty()) {
 
         filePath = HttpUtils::buildPath(rootDir, uri);
-        Logger::debugf("Built path from root: %s", filePath.c_str());
     } else {
 
         filePath = std::string(uri);
-        Logger::debugf("Using direct path: %s", filePath.c_str());
     }
 
-    Logger::debugf("Reading file: %s", filePath.c_str());
 
     std::string content, mimeType;
     if (fileCache.getFile(filePath, content, mimeType)) {
-        Logger::debugf("File found in cache: %s", filePath.c_str());
         status = StatusCode::OK;
         return content;
     }
 
     if (!std::filesystem::exists(filePath)) {
-        Logger::debugf("File does not exist: %s", filePath.c_str());
         status = StatusCode::NOT_FOUND;
         return "";
     }
 
     std::ifstream file(filePath, std::ios::binary);
     if (!file.is_open()) {
-        Logger::debugf("Cannot open file: %s", filePath.c_str());
         status = StatusCode::NOT_FOUND;
         return "";
     }
@@ -58,9 +52,7 @@ std::string FileUtils::readFile(std::string_view rootDir, std::string_view uri, 
     file.close();
 
     if (content.empty()) {
-        Logger::debugf("File is empty: %s", filePath.c_str());
     } else {
-        Logger::debugf("Successfully read %zu bytes from: %s", content.length(), filePath.c_str());
     }
 
     fileCache.cacheFile(filePath, content, FileUtils::getMimeType(filePath));
@@ -187,7 +179,12 @@ std::optional<std::string> FileUtils::readFileContent(std::string_view filePath)
 
 bool FileUtils::writeFileContent(std::string_view filePath, std::string_view content) {
     std::ofstream file(std::string(filePath), std::ios::binary);
-    return file.is_open() && (file << content) && file.good();
+    if (!file.is_open()) return false;
+    
+    // Use write for binary data instead of << operator
+    file.write(content.data(), content.size());
+    file.close();
+    return file.good();
 }
 
 void FileUtils::clearCache() {
