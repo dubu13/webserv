@@ -10,7 +10,7 @@ using HTTP::StatusCode;
 
 class HttpUtils {
 public:
-    // Root directory utilities
+
     static std::string getEffectiveRoot(std::string_view root);
 
     static std::string_view trimWhitespace(std::string_view str);

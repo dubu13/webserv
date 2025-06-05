@@ -99,7 +99,7 @@ HttpResponse HttpResponse::file(std::string_view filePath) {
 
         return HttpResponse().status(200, "OK").body(content, contentType);
     } catch (const std::exception& e) {
-        // Simple error page that avoids circular dependency
+
         std::string statusText = HTTP::statusToString(404);
         std::string errorContent = "<html><body><h1>404 " + statusText + "</h1></body></html>";
         return HttpResponse().status(404, statusText).body(errorContent, "text/html");

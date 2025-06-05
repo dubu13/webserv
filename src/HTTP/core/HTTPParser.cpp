@@ -153,16 +153,14 @@ static std::string extractBoundary(std::string_view contentType) {
     size_t boundaryPos = contentType.find("boundary=");
     if (boundaryPos == std::string_view::npos) return "";
 
-    // Extract boundary value after "boundary="
     boundaryPos += 9;
     size_t boundaryEnd = contentType.find(";", boundaryPos);
     if (boundaryEnd == std::string_view::npos) {
         boundaryEnd = contentType.length();
     }
-    
+
     std::string boundary = std::string(contentType.substr(boundaryPos, boundaryEnd - boundaryPos));
-    
-    // Remove quotes if present
+
     if (boundary.length() >= 2 && boundary.front() == '"' && boundary.back() == '"') {
         boundary = boundary.substr(1, boundary.length() - 2);
     }
