@@ -161,6 +161,7 @@ void Server::handleClient(int fd) {
         }
 
         std::string responseStr = MethodHandler::handleRequest(request, root);
+        std::string responseStr = MethodHandler::handleRequest(request, root, &_router);
         send(fd, responseStr.c_str(), responseStr.length(), 0);
 
         removeClient(fd);

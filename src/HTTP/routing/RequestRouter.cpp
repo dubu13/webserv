@@ -104,3 +104,31 @@ std::string RequestRouter::getRedirectionTarget(const LocationBlock* location) c
     Logger::debugf("Found redirection target: %s", location->redirection.c_str());
     return location->redirection;
 }
+std::string RequestRouter::handleRedirection(const LocationBlock* location) const {
+    if (!hasRedirection(location))
+        return "";
+
+    std::string target = getRedirectionTarget(location);
+    int code = 302;
+    std::string redirectUrl = target;
+
+    size_t spacePos = target.find(' ');
+    if (spacePos != std::string::npos) {
+        std::string codeStr = target.substr(0, spacePos);
+
+        try {
+            int parsedCode = std::stoi(codeStr);
+
+            if (parsedCode == 301 || parsedCode == 302 || 
+                parsedCode == 303 || parsedCode == 307 || parsedCode == 308) {
+                code = parsedCode;
+                redirectUrl = target.substr(spacePos + 1);
+                Logger::debugf("Redirect with code %d to %s", code, redirectUrl.c_str());
+            }
+        } catch (const std::exception& e) {
+            Logger::debugf("Invalid redirect code format, using default 302"); 
+        }
+    }
+
+    return HttpResponse::redirect(redirectUrl, code).str();
+}

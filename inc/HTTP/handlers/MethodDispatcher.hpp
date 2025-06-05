@@ -5,6 +5,7 @@
 #include "HTTP/core/HTTPTypes.hpp"
 #include "HTTP/core/HTTPParser.hpp"
 #include "HTTP/core/HttpResponse.hpp"
+#include "HTTP/routing/RequestRouter.hpp"
 #include "utils/Logger.hpp"
 
 using HTTP::Request;
@@ -12,7 +13,7 @@ using HTTP::Request;
 class MethodHandler {
 public:
 
-    static std::string handleRequest(const Request& request, std::string_view root = "./www");
+    static std::string handleRequest(const Request& request, std::string_view root = "./www", const RequestRouter* router = nullptr);
 
 private:
 
