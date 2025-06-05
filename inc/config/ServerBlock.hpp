@@ -32,18 +32,8 @@ struct ServerBlock {
         return false;
     }
 
-    const LocationBlock* getLocation(const std::string& path) const {
-        std::string bestMatch = "";
-        for (const auto& [locationPath, config] : locations) {
-            if (locationPath == "/" ||
-                (path.find(locationPath) == 0 &&
-                 (path.length() == locationPath.length() ||
-                  path[locationPath.length()] == '/'))) {
-                if (locationPath.length() > bestMatch.length()) {
-                    bestMatch = locationPath;
-                }
-            }
-        }
-        return bestMatch.empty() ? nullptr : &locations.at(bestMatch);
-    }
+    const LocationBlock* getLocation(const std::string& path) const;
+    
+private:
+    const LocationBlock* findBestLocationMatch(const std::string& path) const;
 };

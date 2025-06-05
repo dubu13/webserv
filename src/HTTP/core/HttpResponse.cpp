@@ -1,4 +1,5 @@
 #include "HTTP/core/HttpResponse.hpp"
+#include "HTTP/core/HTTPTypes.hpp"
 #include "utils/Logger.hpp"
 #include "utils/Utils.hpp"
 #include <sstream>
@@ -11,20 +12,6 @@ std::string HttpResponse::formatDate() {
     std::ostringstream ss;
     ss << std::put_time(std::gmtime(&now), "%a, %d %b %Y %H:%M:%S GMT");
     return ss.str();
-}
-
-std::string HttpResponse::getDefaultStatusText(int code) {
-    static const std::map<int, std::string> statusTexts = {
-        {200, "OK"}, {201, "Created"}, {204, "No Content"},
-        {301, "Moved Permanently"}, {302, "Found"}, {400, "Bad Request"},
-        {403, "Forbidden"}, {404, "Not Found"}, {405, "Method Not Allowed"},
-        {500, "Internal Server Error"}
-    };
-
-    if (auto it = statusTexts.find(code); it != statusTexts.end()) {
-        return it->second;
-    }
-    return "Unknown";
 }
 
 std::string HttpResponse::str() const {
@@ -57,7 +44,7 @@ std::string HttpResponse::str() const {
 
 HttpResponse& HttpResponse::status(int code, std::string_view text) {
     _statusCode = code;
-    _statusText = text.empty() ? getDefaultStatusText(code) : std::string(text);
+    _statusText = text.empty() ? HTTP::statusToString(code) : std::string(text);
     return *this;
 }
 
@@ -83,34 +70,14 @@ std::string HttpResponse::ok(std::string_view content, std::string_view contentT
     return buildResponse(200, "OK", content, contentType);
 }
 
-std::string HttpResponse::notFound(std::string_view message) {
-    return buildResponse(404, "Not Found", message, "text/plain");
-}
-
-std::string HttpResponse::badRequest(std::string_view message) {
-    return buildResponse(400, "Bad Request", message, "text/plain");
-}
-
-std::string HttpResponse::methodNotAllowed(std::string_view message) {
-    return buildResponse(405, "Method Not Allowed", message, "text/plain");
-}
-
-std::string HttpResponse::internalError(std::string_view message) {
-    return buildResponse(500, "Internal Server Error", message, "text/plain");
-}
-
 std::string HttpResponse::buildResponse(int statusCode,
                                       const std::string& statusText,
                                       std::string_view content,
                                       std::string_view contentType) {
-    std::ostringstream response;
-    response << "HTTP/1.1 " << statusCode << " " << statusText << "\r\n";
-    response << "Content-Type: " << contentType << "\r\n";
-    response << "Content-Length: " << content.length() << "\r\n";
-    response << "Connection: close\r\n";
-    response << "\r\n";
-    response << content;
-    return response.str();
+    return HttpResponse()
+        .status(statusCode, statusText)
+        .body(content, contentType)
+        .str();
 }
 
 HttpResponse HttpResponse::redirect(std::string_view location, int code) {
@@ -132,12 +99,10 @@ HttpResponse HttpResponse::file(std::string_view filePath) {
 
         return HttpResponse().status(200, "OK").body(content, contentType);
     } catch (const std::exception& e) {
-        return HttpResponse().status(404, "Not Found")
-            .body(
-                "<!DOCTYPE html><html><head><title>404 Not Found</title></head>"
-                "<body><h1>404 Not Found</h1><p>" + std::string(e.what()) + "</p></body></html>",
-                "text/html"
-            );
+        // Simple error page that avoids circular dependency
+        std::string statusText = HTTP::statusToString(404);
+        std::string errorContent = "<html><body><h1>404 " + statusText + "</h1></body></html>";
+        return HttpResponse().status(404, statusText).body(errorContent, "text/html");
     }
 }
 

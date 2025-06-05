@@ -29,10 +29,6 @@ public:
     }
 
     static std::string ok(std::string_view content = "", std::string_view contentType = "text/plain");
-    static std::string notFound(std::string_view message = "Not Found");
-    static std::string badRequest(std::string_view message = "Bad Request");
-    static std::string methodNotAllowed(std::string_view message = "Method Not Allowed");
-    static std::string internalError(std::string_view message = "Internal Server Error");
     static HttpResponse redirect(std::string_view location, int code = 302);
 
     static HttpResponse file(std::string_view filePath);
@@ -45,7 +41,6 @@ public:
 
 private:
     static std::string formatDate();
-    static std::string getDefaultStatusText(int code);
     void setHeader(const std::pair<std::string_view, std::string_view>& header);
 
     int _statusCode{200};

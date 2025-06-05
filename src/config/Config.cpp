@@ -6,15 +6,15 @@
 #include <sstream>
 
 Config::Config(const std::string& fileName) : _fileName(fileName) {
-    Logger::infof("Config constructor with file: %s", fileName.c_str());
+    Logger::logf<LogLevel::INFO>("Config constructor with file: %s", fileName.c_str());
     initializeHandlers();
 }
 
 void Config::parseFromFile() {
-    Logger::infof("Starting to parse config file: %s", _fileName.c_str());
+    Logger::logf<LogLevel::INFO>("Starting to parse config file: %s", _fileName.c_str());
     std::ifstream file(_fileName);
     if (!file.is_open()) {
-        Logger::errorf("Could not open config file: %s", _fileName.c_str());
+        Logger::logf<LogLevel::ERROR>("Could not open config file: %s", _fileName.c_str());
         throw std::runtime_error("Could not open config file: " + _fileName);
     }
 
@@ -28,7 +28,7 @@ void Config::parseFromFile() {
         throw std::runtime_error("No server blocks found in config file");
     }
 
-    Logger::infof("Found %zu server blocks in config", serverBlocks.size());
+    Logger::logf<LogLevel::INFO>("Found %zu server blocks in config", serverBlocks.size());
 
     for (size_t i = 0; i < serverBlocks.size(); ++i) {
         ServerBlock server;
@@ -38,11 +38,11 @@ void Config::parseFromFile() {
             std::string hostToUse = server.host.empty() ? listen.first : server.host;
             std::string key = hostToUse + ":" + std::to_string(listen.second);
             _servers[key] = server;
-            Logger::infof("Added server configuration for %s", key.c_str());
+            Logger::logf<LogLevel::INFO>("Added server configuration for %s", key.c_str());
         }
     }
 
-    Logger::infof("Configuration parsing completed successfully. Total servers: %zu", _servers.size());
+    Logger::logf<LogLevel::INFO>("Configuration parsing completed successfully. Total servers: %zu", _servers.size());
 }
 
 void Config::parseServerBlock(const std::string& content, ServerBlock& server) {
@@ -83,7 +83,7 @@ void Config::parseServerBlock(const std::string& content, ServerBlock& server) {
         if (it != _serverHandlers.end()) {
             (this->*(it->second))(value, server);
         } else {
-            Logger::warnf("Unknown server directive: %s", directive.c_str());
+            Logger::logf<LogLevel::WARN>("Unknown server directive: %s", directive.c_str());
         }
 
     }
@@ -99,7 +99,6 @@ void Config::parseLocationBlock(const std::string& content, LocationBlock& locat
     while (std::getline(iss, line)) {
         auto [directive, value] = ConfigUtils::parseDirective(line);
         if (directive.empty() || directive.find("location ") == 0) continue;
-
 
         auto it = _locationHandlers.find(directive);
         if (it != _locationHandlers.end()) {

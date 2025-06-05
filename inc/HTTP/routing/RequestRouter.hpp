@@ -21,14 +21,11 @@ public:
     const LocationBlock* findLocation(const std::string& uri) const;
     std::string resolveRoot(const LocationBlock* location) const;
     bool isMethodAllowed(const Request& request, const LocationBlock* location) const;
-    
-    // Redirection support
+
     bool hasRedirection(const LocationBlock* location) const;
     std::string getRedirectionTarget(const LocationBlock* location) const;
-    
-    // Consolidated method for handling redirection
+
     std::string handleRedirection(const LocationBlock* location) const;
-    
-    // Getter for config to use in error responses
+
     const ServerBlock* getConfig() const { return _config; }
 };

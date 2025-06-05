@@ -15,7 +15,7 @@ private:
     bool _running;
     Poller _poller;
     std::map<int, time_t> _clients;
-    std::map<int, std::string> _clientBuffers; // Buffer for incomplete requests
+    std::map<int, std::string> _clientBuffers;
     const ServerBlock* _config;
     RequestRouter _router;
 

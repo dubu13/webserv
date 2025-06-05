@@ -20,6 +20,7 @@ public:
     static bool isValidPath(const std::string& path);
 
     static size_t parseSize(const std::string& value);
+    static bool parseBooleanValue(const std::string& value);
     static std::pair<std::string, int> parseListenDirective(const std::string& value);
     static std::map<int, std::string> parseErrorPages(const std::string& value);
 };

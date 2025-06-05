@@ -45,7 +45,7 @@ std::vector<struct pollfd> Poller::poll(int timeout) {
     int ret = ::poll(_fds.data(), _fds.size(), timeout);
 
     if (ret < 0) {
-        Logger::errorf("Poll error: %s", strerror(errno));
+        Logger::logf<LogLevel::ERROR>("Poll error: %s", strerror(errno));
         return result;
     }
 
