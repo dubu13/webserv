@@ -13,10 +13,31 @@ using HTTP::Method;
 using HTTP::StatusCode;
 using HTTP::methodToString;
 
-std::string MethodHandler::handleRequest(const Request& request, std::string_view root) {
+std::string MethodHandler::handleRequest(const Request& request, std::string_view root, const RequestRouter* router) {
     Logger::debugf("Handling %s request for URI: %s",
                   methodToString(request.requestLine.method).c_str(),
                   request.requestLine.uri.c_str());
+    if (router) {
+        const LocationBlock* location = router->findLocation(request.requestLine.uri);
+        Logger::warnf("Found location: %s", location ? location->path.c_str() : "None");
+        
+        if (location) {
+            Logger::warnf("Location details - Path: %s, Root: %s, Redirection: %s", 
+                         location->path.c_str(), 
+                         location->root.c_str(),
+                         location->redirection.empty() ? "None" : location->redirection.c_str());
+        }
+        
+        std::string redirectResponse = router->handleRedirection(location);
+        if (!redirectResponse.empty()) {
+            Logger::debugf("Redirecting request for URI: %s", request.requestLine.uri.c_str());
+            return redirectResponse;
+        }
+
+        if (!router->isMethodAllowed(request, location)) {
+            return HttpResponse::methodNotAllowed("Method not allowed for this location");
+        }
+    }
 
     switch (request.requestLine.method) {
         case Method::GET:
@@ -38,6 +59,7 @@ std::string MethodHandler::handleGet(const Request& request, std::string_view ro
 
     std::string filePath = HttpUtils::buildPath(effectiveRoot, uri);
     Logger::debugf("Complete file path: '%s'", filePath.c_str());
+
 
     CGIHandler cgiHandler(effectiveRoot);
     if (cgiHandler.canHandle(filePath)) {
@@ -72,11 +94,21 @@ std::string MethodHandler::handlePost(const Request& request, std::string_view r
             std::string timestamp = "upload_" + std::to_string(std::time(nullptr));
             std::string fullPath = HttpUtils::buildPath(uploadPath, timestamp + ".dat");
 
-            if (!FileUtils::writeFileContent(fullPath, request.body)) {
+            // Fix: Use proper binary content writing
+            std::ofstream file(fullPath, std::ios::binary);
+            if (!file.is_open()) {
+                Logger::errorf("Failed to open file for writing: %s", fullPath.c_str());
+                return HttpResponse::internalError("Failed to save uploaded file");
+            }
+            
+            file.write(request.body.data(), request.body.size());
+            file.close();
+            
+            if (!file.good()) {
                 Logger::errorf("Failed to write uploaded file: %s", fullPath.c_str());
                 return HttpResponse::internalError("Failed to save uploaded file");
             }
-
+            
             Logger::infof("File uploaded successfully: %s", fullPath.c_str());
             return HttpResponse::ok("File uploaded successfully", "text/plain");
         }

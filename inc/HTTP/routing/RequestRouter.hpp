@@ -6,6 +6,7 @@
 #include "config/LocationBlock.hpp"
 #include "HTTP/core/HTTPTypes.hpp"
 #include "HTTP/core/HTTPParser.hpp"
+#include "HTTP/core/HttpResponse.hpp"
 
 using HTTP::Request;
 using HTTP::methodToString;
@@ -24,4 +25,7 @@ public:
     // Redirection support
     bool hasRedirection(const LocationBlock* location) const;
     std::string getRedirectionTarget(const LocationBlock* location) const;
+    
+    // Consolidated method for handling redirection
+    std::string handleRedirection(const LocationBlock* location) const;
 };
