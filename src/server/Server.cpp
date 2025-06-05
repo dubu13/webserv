@@ -108,7 +108,7 @@ int Server::setupSocket() {
     return _serverFd;
 }
 
-void Server::acceptConnection() {
+int Server::acceptConnection() {
     struct sockaddr_in clientAddr;
     socklen_t addrLen = sizeof(clientAddr);
 
@@ -117,18 +117,20 @@ void Server::acceptConnection() {
         if (errno != EAGAIN && errno != EWOULDBLOCK) {
             Logger::error("Failed to accept connection");
         }
-        return;
+        return -1;
     }
 
-    int flags = fcntl(clientFd, F_GETFL, 0);
-    if (flags < 0 || fcntl(clientFd, F_SETFL, flags | O_NONBLOCK) < 0) {
+    if (fcntl(clientFd, F_SETFL, O_NONBLOCK) < 0) {
         Logger::error("Failed to set client socket to non-blocking mode");
         close(clientFd);
-        return;
+        return -1;
     }
 
-    _poller.add(clientFd, POLLIN);
     _clients[clientFd] = std::time(nullptr);
+    _clientBuffers[clientFd] = "";
+    
+    Logger::logf<LogLevel::INFO>("New client connected: fd=%d", clientFd);
+    return clientFd;
 }
 
 void Server::handleClient(int fd) {
@@ -189,7 +191,7 @@ void Server::handleClient(int fd) {
 }
 
 void Server::removeClient(int fd) {
-    _poller.remove(fd);
+    // Note: Don't remove from poller here - ServerManager handles it
     _clients.erase(fd);
     _clientBuffers.erase(fd);
     close(fd);
@@ -210,7 +212,7 @@ void Server::checkTimeouts() {
 
             it = _clients.erase(it);
             _clientBuffers.erase(fd);
-            _poller.remove(fd);
+            // Note: Don't remove from poller here - ServerManager handles it
             close(fd);
         } else {
             ++it;
