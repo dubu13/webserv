@@ -28,7 +28,7 @@ public:
     void stop() { _running = false; }
     
     // Methods that ServerManager will call
-    void acceptConnection();
+    int acceptConnection();  // Return client fd
     void handleClient(int fd);
     void checkTimeouts();
     

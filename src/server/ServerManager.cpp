@@ -133,7 +133,12 @@ void ServerManager::dispatchEvent(const struct pollfd& pfd) {
     if (serverIt != _socketToServerMap.end()) {
         // It's a server socket, handle new connection
         size_t serverIndex = serverIt->second;
-        _servers[serverIndex]->acceptConnection();
+        int clientFd = _servers[serverIndex]->acceptConnection();
+        
+        // Add new client to poller
+        if (clientFd > 0) {
+            _poller.add(clientFd, POLLIN | POLLOUT);
+        }
         return;
     }
     
@@ -141,6 +146,11 @@ void ServerManager::dispatchEvent(const struct pollfd& pfd) {
     for (auto& server : _servers) {
         if (server->hasClient(pfd.fd)) {
             server->handleClient(pfd.fd);
+            
+            // Check if client was removed and clean up poller
+            if (!server->hasClient(pfd.fd)) {
+                _poller.remove(pfd.fd);
+            }
             return;
         }
     }
