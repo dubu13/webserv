@@ -66,7 +66,7 @@ bool FileUtils::writeFile(std::string_view rootDir, std::string_view uri, std::s
         status = validation.status;
         return false;
     }
-    
+
     if (writeFileContent(validation.filePath, content)) {
         fileCache.cacheFile(validation.filePath, std::string(content), "text/html");
         status = StatusCode::CREATED;

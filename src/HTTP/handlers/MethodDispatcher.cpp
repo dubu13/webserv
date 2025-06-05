@@ -45,7 +45,7 @@ std::pair<std::string, std::string> MethodHandler::resolvePaths(const Request& r
 
 std::string MethodHandler::handleGet(const Request& request, std::string_view root, [[maybe_unused]] const RequestRouter* router) {
     auto [effectiveRoot, filePath] = resolvePaths(request, root);
-    
+
     CGIHandler cgiHandler(effectiveRoot);
     if (cgiHandler.canHandle(filePath)) {
         return cgiHandler.executeCGI(request.requestLine.uri, request);

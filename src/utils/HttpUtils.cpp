@@ -141,19 +141,19 @@ bool HttpUtils::isSecureRequest(const std::string& data) {
 
 std::string HttpUtils::sanitizePath(std::string_view path) {
     if (path.empty()) return "/";
-    
+
     try {
         std::filesystem::path fsPath(path);
         fsPath = fsPath.lexically_normal();
-        
+
         std::string result = fsPath.string();
         if (result.empty() || result[0] != '/') {
             result = "/" + result;
         }
-        
+
         return result;
     } catch (const std::exception&) {
-        return "/";  // Fallback for invalid paths
+        return "/";
     }
 }
 

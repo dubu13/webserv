@@ -33,7 +33,7 @@ struct ServerBlock {
     }
 
     const LocationBlock* getLocation(const std::string& path) const;
-    
+
 private:
     const LocationBlock* findBestLocationMatch(const std::string& path) const;
 };

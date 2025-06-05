@@ -12,7 +12,6 @@ const LocationBlock* RequestRouter::findLocation(const std::string& uri) const {
     return _config->getLocation(uri);
 }
 
-
 std::string RequestRouter::resolveRoot(const LocationBlock* location) const {
 
     if (location && !location->root.empty()) {

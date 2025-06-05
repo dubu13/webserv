@@ -6,23 +6,21 @@
 
 using namespace HTTP;
 
-ValidationUtils::FileAccessResult 
+ValidationUtils::FileAccessResult
 ValidationUtils::validateFileAccess(std::string_view rootDir, std::string_view uri) {
     FileAccessResult result;
     result.filePath = HttpUtils::buildPath(rootDir, uri);
-    
+
     if (!isPathSafe(uri)) {
         result.status = StatusCode::FORBIDDEN;
         result.isValid = false;
         return result;
     }
-    
+
     result.status = StatusCode::OK;
     result.isValid = true;
     return result;
 }
-
-// Removed unnecessary wrapper functions - use isPathSafe() and direct validation instead
 
 bool ValidationUtils::validateLimit(size_t value, size_t limit, const char* errorMsg) {
     if (value > limit) {

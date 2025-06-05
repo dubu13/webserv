@@ -181,8 +181,7 @@ bool ConfigUtils::isValidIPv4(const std::string& ip) {
 }
 
 bool ConfigUtils::isValidMethod(const std::string& method) {
-    // Use HTTP::stringToMethod for consistent validation
-    // Config allows additional methods like PUT, HEAD, OPTIONS, PATCH
+
     static const std::vector<std::string> configValidMethods = {
         "GET", "POST", "DELETE"
     };
@@ -214,12 +213,10 @@ bool ConfigUtils::isValidPath(const std::string& path) {
         return false;
     }
 
-    // Use ValidationUtils for consistent path safety checks
     if (!ValidationUtils::isPathSafe(path)) {
         return false;
     }
 
-    // Additional config-specific validation: limit excessive directory traversal
     size_t pos = 0;
     int dotdot_count = 0;
     while ((pos = path.find("../", pos)) != std::string::npos) {

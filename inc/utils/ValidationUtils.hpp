@@ -10,11 +10,10 @@ public:
         HTTP::StatusCode status;
         bool isValid;
     };
-    
-    static FileAccessResult validateFileAccess(std::string_view rootDir, 
+
+    static FileAccessResult validateFileAccess(std::string_view rootDir,
                                              std::string_view uri);
-    
-    // HTTP validation functions moved from HttpUtils
+
     static bool validateLimit(size_t value, size_t limit, const char* errorMsg);
     static bool validateContentLength(const std::string& length, size_t& result);
     static bool validateBodySize(size_t size);
@@ -24,7 +23,6 @@ public:
     static bool validateUriLength(size_t length);
     static bool validateHeaderSize(const std::string& data, size_t maxSize);
     static bool validateChunkTerminator(std::string_view data, size_t pos);
-    
-    // Path safety validation
+
     static bool isPathSafe(std::string_view path);
 };

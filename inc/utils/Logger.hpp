@@ -64,7 +64,7 @@ private:
         ss << value;
         return ss.str();
     }
-    
+
     template<typename... Args>
     static std::string simpleFormat(std::string_view format, Args&&... args) {
         if constexpr (sizeof...(args) == 0) {
@@ -72,7 +72,7 @@ private:
         } else {
             std::ostringstream result;
             std::vector<std::string> values = {toString(std::forward<Args>(args))...};
-            
+
             size_t argIndex = 0;
             for (char c : format) {
                 if (c == '%' && argIndex < values.size()) {
