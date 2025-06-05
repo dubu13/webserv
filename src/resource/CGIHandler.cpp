@@ -14,7 +14,6 @@ CGIHandler::CGIHandler(const std::string &root) : _root_directory(root) {
   registerHandler(".php", "/usr/bin/php");
   registerHandler(".py", "/usr/bin/python3");
   registerHandler(".pl", "/usr/bin/perl");
-  Logger::debugf("Registered %zu CGI handlers", _cgi_handlers.size());
 }
 
 CGIHandler::~CGIHandler() {}

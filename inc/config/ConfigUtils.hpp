@@ -7,7 +7,6 @@
 class ConfigUtils {
 public:
 
-    static std::string trim(const std::string& str);
     static std::vector<std::string> splitWhitespace(const std::string& str);
 
     static std::vector<std::string> extractServerBlocks(const std::string& content);

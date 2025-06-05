@@ -2,8 +2,6 @@
 
 #include <vector>
 #include <poll.h>
-#include <map>
-#include <chrono>
 
 class Poller {
 public:
@@ -23,11 +21,6 @@ public:
     void update(int fd, short events);
     std::vector<struct pollfd> poll(int timeout = DEFAULT_TIMEOUT);
 
-    void updateLastActivity(int fd);
-    bool hasTimedOut(int fd) const;
-    void removeTimedOutConnections();
-
 private:
     std::vector<struct pollfd> _fds;
-    std::map<int, std::chrono::steady_clock::time_point> _lastActivity;
 };

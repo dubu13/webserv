@@ -7,10 +7,7 @@
 #include <arpa/inet.h>
 #include <string_view>
 
-std::string ConfigUtils::trim(const std::string& str) {
-    std::string_view trimmed = HttpUtils::trimWhitespace(str);
-    return std::string(trimmed);
-}
+
 
 std::vector<std::string> ConfigUtils::splitWhitespace(const std::string& str) {
     std::vector<std::string> tokens;
@@ -28,7 +25,7 @@ std::vector<std::string> ConfigUtils::extractServerBlocks(const std::string& con
     std::string line;
 
     while (std::getline(iss, line)) {
-        line = ConfigUtils::trim(line);
+        line = std::string(HttpUtils::trimWhitespace(line));
         if (line == "server {") {
             std::string blockContent;
             int braceCount = 1;

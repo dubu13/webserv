@@ -1,6 +1,7 @@
 #include "config/Config.hpp"
 #include "utils/Logger.hpp"
 #include "config/ConfigUtils.hpp"
+#include "utils/Utils.hpp"
 #include <fstream>
 #include <sstream>
 
@@ -20,7 +21,6 @@ void Config::parseFromFile() {
     std::string content((std::istreambuf_iterator<char>(file)),
                         std::istreambuf_iterator<char>());
     file.close();
-    Logger::debugf("Read %zu bytes from config file", content.length());
 
     std::vector<std::string> serverBlocks = ConfigUtils::extractServerBlocks(content);
     if (serverBlocks.empty()) {
@@ -31,7 +31,6 @@ void Config::parseFromFile() {
     Logger::infof("Found %zu server blocks in config", serverBlocks.size());
 
     for (size_t i = 0; i < serverBlocks.size(); ++i) {
-        Logger::debugf("Parsing server block %zu...", i + 1);
         ServerBlock server;
         parseServerBlock(serverBlocks[i], server);
 
@@ -47,7 +46,6 @@ void Config::parseFromFile() {
 }
 
 void Config::parseServerBlock(const std::string& content, ServerBlock& server) {
-    Logger::debug("Parsing server block...");
     std::istringstream iss(content);
     std::string line;
 
@@ -55,15 +53,12 @@ void Config::parseServerBlock(const std::string& content, ServerBlock& server) {
         auto [directive, value] = ConfigUtils::parseDirective(line);
         if (directive.empty()) continue;
 
-        Logger::debugf("Processing directive: '%s' with value: '%s'", directive.c_str(), value.c_str());
-
         if (directive == "location") {
             std::string locationPath = value;
-
             size_t bracePos = locationPath.find('{');
             if (bracePos != std::string::npos)
                 locationPath = locationPath.substr(0, bracePos);
-            locationPath = ConfigUtils::trim(locationPath);
+            locationPath = std::string(HttpUtils::trimWhitespace(locationPath));
 
             if (locationPath.empty() || !ConfigUtils::isValidPath(locationPath))
                 throw std::invalid_argument("Invalid location path: " + locationPath);
@@ -78,18 +73,14 @@ void Config::parseServerBlock(const std::string& content, ServerBlock& server) {
                 if (braceCount > 0)
                     locationContent += line + "\n";
             }
-
             LocationBlock location;
             location.path = locationPath;
-            Logger::debugf("Parsing location block for path: %s", locationPath.c_str());
             parseLocationBlock(locationContent, location);
             server.locations[locationPath] = location;
-            Logger::debugf("Added location %s with root: %s", locationPath.c_str(), location.root.c_str());
             continue;
         }
         auto it = _serverHandlers.find(directive);
         if (it != _serverHandlers.end()) {
-            Logger::debugf("Handling server directive: %s = %s", directive.c_str(), value.c_str());
             (this->*(it->second))(value, server);
         } else {
             Logger::warnf("Unknown server directive: %s", directive.c_str());
@@ -97,14 +88,11 @@ void Config::parseServerBlock(const std::string& content, ServerBlock& server) {
 
     }
 
-    Logger::debugf("Server block parsed. Root: %s, Locations: %zu",
-                   server.root.c_str(), server.locations.size());
     if (server.listenDirectives.empty())
         throw std::invalid_argument("Server block must have at least one listen directive");
 }
 
 void Config::parseLocationBlock(const std::string& content, LocationBlock& location) {
-    Logger::debugf("Parsing location block content: %s", content.c_str());
     std::istringstream iss(content);
     std::string line;
 
@@ -112,7 +100,6 @@ void Config::parseLocationBlock(const std::string& content, LocationBlock& locat
         auto [directive, value] = ConfigUtils::parseDirective(line);
         if (directive.empty() || directive.find("location ") == 0) continue;
 
-        Logger::debugf("Location directive: '%s' = '%s'", directive.c_str(), value.c_str());
 
         auto it = _locationHandlers.find(directive);
         if (it != _locationHandlers.end()) {

@@ -15,6 +15,7 @@
 #include "HTTP/handlers/MethodDispatcher.hpp"
 #include "HTTP/core/HttpResponse.hpp"
 #include "HTTP/core/HTTPParser.hpp"
+#include "HTTP/core/ErrorResponseBuilder.hpp"
 #include "utils/Utils.hpp"
 #include <sstream>
 
@@ -25,7 +26,10 @@ Server::Server(const ServerBlock* config)
     : _serverFd(-1)
     , _running(false)
     , _config(config)
-    , _router(config) {}
+    , _router(config) {
+    // Set the config for ErrorResponseBuilder to use custom error pages
+    ErrorResponseBuilder::setCurrentConfig(config);
+}
 
 Server::~Server() {
     if (_serverFd >= 0) {
@@ -136,38 +140,57 @@ void Server::handleClient(int fd) {
 
     if (bytesRead <= 0) {
         if (bytesRead < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            return;
+            return; // Would block, try again later
         }
         removeClient(fd);
         return;
     }
 
     buffer[bytesRead] = '\0';
-    std::string requestData(buffer, bytesRead);
+    
+    // Accumulate data in client buffer
+    _clientBuffers[fd] += std::string(buffer, bytesRead);
+    
+    // Update client activity timestamp
+    _clients[fd] = std::time(nullptr);
+    
+    // Check if we have a complete request
+    if (!HttpUtils::isCompleteRequest(_clientBuffers[fd])) {
+        return; // Wait for more data
+    }
 
     try {
         Request request;
-        if (!parseRequest(requestData, request)) {
-            Logger::error("Failed to parse HTTP request");
+        if (!parseRequest(_clientBuffers[fd], request)) {
+            // Use ErrorResponseBuilder for proper 400 response
+            std::string errorResponse = ErrorResponseBuilder::buildResponse(400);
+            send(fd, errorResponse.c_str(), errorResponse.length(), MSG_NOSIGNAL);
             removeClient(fd);
             return;
         }
-
-        Logger::debugf("Processing request URI: '%s'", request.requestLine.uri.c_str());
 
         std::string root = "./www";
         if (_config && !_config->root.empty()) {
             root = _config->root;
         }
-
-        std::string responseStr = MethodHandler::handleRequest(request, root);
+        
         std::string responseStr = MethodHandler::handleRequest(request, root, &_router);
-        send(fd, responseStr.c_str(), responseStr.length(), 0);
-
-        removeClient(fd);
+        
+        // Ensure Connection: close header is added
+        if (responseStr.find("Connection:") == std::string::npos) {
+            size_t headerEnd = responseStr.find("\r\n\r\n");
+            if (headerEnd != std::string::npos) {
+                responseStr.insert(headerEnd, "\r\nConnection: close");
+            }
+        }
+        
+        send(fd, responseStr.c_str(), responseStr.length(), MSG_NOSIGNAL);
+        removeClient(fd); // Always close after response for now
 
     } catch (const std::exception& e) {
         Logger::errorf("Error handling client: %s", e.what());
+        std::string errorResponse = ErrorResponseBuilder::buildResponse(500);
+        send(fd, errorResponse.c_str(), errorResponse.length(), MSG_NOSIGNAL);
         removeClient(fd);
     }
 }
@@ -175,18 +198,26 @@ void Server::handleClient(int fd) {
 void Server::removeClient(int fd) {
     _poller.remove(fd);
     _clients.erase(fd);
+    _clientBuffers.erase(fd); // Clean up buffer
     close(fd);
+    Logger::warnf("Client removed: fd=%d", fd);
 }
 
 void Server::checkTimeouts() {
-    const time_t timeout = 60;
+    const time_t timeout = 30;
     const time_t now = std::time(nullptr);
 
     auto it = _clients.begin();
     while (it != _clients.end()) {
         if (now - it->second > timeout) {
             int fd = it->first;
+            
+            // Send proper timeout response before closing
+            std::string timeoutResponse = ErrorResponseBuilder::buildResponse(408);
+            send(fd, timeoutResponse.c_str(), timeoutResponse.length(), MSG_NOSIGNAL);
+            
             it = _clients.erase(it);
+            _clientBuffers.erase(fd); // Clean up buffer
             _poller.remove(fd);
             close(fd);
         } else {

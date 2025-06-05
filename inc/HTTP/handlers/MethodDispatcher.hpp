@@ -17,7 +17,7 @@ public:
 
 private:
 
-    static std::string handleGet(const Request& request, std::string_view root);
-    static std::string handlePost(const Request& request, std::string_view root);
-    static std::string handleDelete(const Request& request, std::string_view root);
+    static std::string handleGet(const Request& request, std::string_view root, const RequestRouter* router = nullptr);
+    static std::string handlePost(const Request& request, std::string_view root, const RequestRouter* router = nullptr);
+    static std::string handleDelete(const Request& request, std::string_view root, const RequestRouter* router = nullptr);
 };

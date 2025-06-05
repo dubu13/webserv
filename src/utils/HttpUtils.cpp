@@ -1,9 +1,11 @@
 #include "utils/Utils.hpp"
 #include "utils/Logger.hpp"
+#include "HTTP/core/HTTPParser.hpp"
 #include <algorithm>
 #include <sstream>
 #include <vector>
 #include <cstdlib>
+#include <map>
 #include <filesystem>
 
 std::string_view HttpUtils::trimWhitespace(std::string_view str) {
@@ -258,10 +260,6 @@ std::string HttpUtils::buildPath(std::string_view root, std::string_view path) {
     std::string rootStr(root);
     std::string pathStr(path);
 
-    Logger::debugf("buildPath called with root='%.*s', path='%.*s'",
-                   static_cast<int>(root.length()), root.data(),
-                   static_cast<int>(path.length()), path.data());
-
     if (!rootStr.empty() && rootStr.back() == '/') {
         rootStr.pop_back();
     }
@@ -271,7 +269,6 @@ std::string HttpUtils::buildPath(std::string_view root, std::string_view path) {
     }
 
     std::string fullPath = rootStr + pathStr;
-    Logger::debugf("Built path result: '%s'", fullPath.c_str());
 
     return fullPath;
 }
