@@ -1,5 +1,6 @@
 #include "server/ServerManager.hpp"
-#include "utils/Logger.h#include <unistd.h>
+#include "utils/Logger.hpp"
+#include <unistd.h>
 #include <stdexcept>
 #include <sstream>
 #include <atomic>  // Add this line
@@ -38,12 +39,12 @@ void ServerManager::initializeServers(const Config& config) {
                     _hostPortMap[hostPort] = _servers.size() - 1;
             }
         } catch (const std::exception& e) {
-            Logger::r("Failed to initialize server for " + key + ": " + e.what());
+            Logger::logf<LogLevel::ERROR>("Failed to initialize server for " + key + ": " + e.what());
             throw;
         }
     }
     
-    Logger::("Initialized " + std::to_string(_servers.size()) + " servers");
+    Logger::logf<LogLevel::INFO>("Initialized % servers", _servers.size());
 }
 
 void ServerManager::setupServerSockets() {
@@ -59,9 +60,9 @@ void ServerManager::setupServerSockets() {
         // Add server socket to poller
         _poller.add(serverFd, POLLIN);
         
-        Logger::("Server %zu listening on fd %d", i, serverFd);
+        Logger::logf<LogLevel::INFO>("Server % listening on fd %", i, serverFd);
     }
-    Logger::("All server sockets initialized");
+    Logger::logf<LogLevel::INFO>("All server sockets initialized");
 }
 bool ServerManager::start() {
     if (_running)
@@ -72,8 +73,8 @@ bool ServerManager::start() {
     try {
         setupServerSockets();
         
-        _running = true;  // Now mark as running
-        Logger::("Starting all servers...");
+        _running = true;
+        Logger::logf<LogLevel::INFO>("Starting all servers...");
         
         // Main server loop - checks both internal state and signal flag
         while (_running && g_running.load()) {
@@ -81,10 +82,10 @@ bool ServerManager::start() {
             checkAllTimeouts();
         }
         
-        Logger::("Server manager stopped");
+        Logger::logf<LogLevel::INFO>("Server manager stopped");
         return true;
     } catch (const std::exception& e) {
-        Logger::r("Error in server manager: " + std::string(e.what()));
+        Logger::logf<LogLevel::ERROR>("Error in server manager: %", e.what());
         return false;
     }
 }
@@ -108,7 +109,7 @@ bool ServerManager::processEvents(int timeout) {
             try {
                 dispatchEvent(pfd);
             } catch (const std::exception& e) {
-                Logger::("Error dispatching event: " + std::string(e.what()));
+                Logger::logf<LogLevel::ERROR>("Error dispatching event: %", e.what());
                 // Continue processing other events
             }
         }
@@ -116,11 +117,11 @@ bool ServerManager::processEvents(int timeout) {
         return true;
     } catch (const std::exception& e) {
         if (errno == EINTR) {
-            Logger::("Poll interrupted by signal");
+            Logger::logf<LogLevel::WARN>("Poll interrupted by signal");
             return true;  // Just try again, don't report as error
         }
         
-        Logger::logf<>("Error processing events: " + std::string(e.what()));
+        Logger::logf<LogLevel::ERROR>("Error processing events: %", e.what());
         return false;
     }
 }
@@ -145,16 +146,12 @@ void ServerManager::dispatchEvent(const struct pollfd& pfd) {
     }
     
     // If we got here, we don't know which server this fd belongs to
-    Logger::("Unhandled socket event for fd: " + std::to_string(pfd.fd));
+    Logger::logf<LogLevel::WARN>("Unhandled socket event for fd: %", pfd.fd);
     _poller.remove(pfd.fd);
     close(pfd.fd);
 }
 
 void ServerManager::checkAllTimeouts() {
-    // Let poller identify timed out connections
-    _poller.removeTimedOutConnections();
-    
-    // Let each server check its own timeouts too
     for (auto& server : _servers) {
         server->checkTimeouts();
     }
