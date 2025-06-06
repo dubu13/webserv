@@ -96,9 +96,8 @@ MethodHandler::handlePost(const Request &request, std::string_view root,
                 ? "upload_" + std::to_string(std::time(nullptr))
                 : file.filename;
         std::string fullPath = HttpUtils::buildPath(uploadPath, filename);
-        if (!uploadedFiles.empty()) {
+        if (!uploadedFiles.empty())
           uploadedFiles += ", ";
-        }
         uploadedFiles += filename;
         std::ofstream outFile(fullPath, std::ios::binary);
         if (!outFile.is_open()) {

@@ -37,9 +37,8 @@ ConfigUtils::extractServerBlocks(const std::string &content) {
           else if (c == '}')
             braceCount--;
         }
-        if (braceCount > 0) {
+        if (braceCount > 0)
           blockContent += line + "\n";
-        }
       }
       blocks.push_back(blockContent);
     }
@@ -51,15 +50,12 @@ std::pair<std::string, std::string>
 ConfigUtils::parseDirective(const std::string &line) {
   std::string_view trimmed_view = HttpUtils::trimWhitespace(line);
 
-  if (trimmed_view.empty() || trimmed_view[0] == '#') {
+  if (trimmed_view.empty() || trimmed_view[0] == '#')
     return {"", ""};
-  }
 
   size_t space_pos = trimmed_view.find(' ');
-  if (space_pos == std::string_view::npos) {
+  if (space_pos == std::string_view::npos)
     return {std::string(trimmed_view), ""};
-  }
-
   std::string_view directive_view = trimmed_view.substr(0, space_pos);
   std::string_view value_view =
       HttpUtils::trimWhitespace(trimmed_view.substr(space_pos + 1));
@@ -68,7 +64,6 @@ ConfigUtils::parseDirective(const std::string &line) {
     value_view.remove_suffix(1);
     value_view = HttpUtils::trimWhitespace(value_view);
   }
-
   return {std::string(directive_view), std::string(value_view)};
 }
 
@@ -78,9 +73,8 @@ ConfigUtils::parseMultiValue(const std::string &value) {
 }
 
 size_t ConfigUtils::parseSize(const std::string &value) {
-  if (value.empty()) {
+  if (value.empty())
     throw std::invalid_argument("Empty size value");
-  }
 
   std::string numStr = value;
   size_t multiplier = 1;
@@ -164,9 +158,8 @@ ConfigUtils::parseErrorPages(const std::string &value) {
     codes.push_back(token);
   }
 
-  if (codes.size() < 2) {
+  if (codes.size() < 2)
     throw std::invalid_argument("Invalid error_page format");
-  }
 
   std::string path = codes.back();
   for (size_t i = 0; i < codes.size() - 1; ++i) {
@@ -202,41 +195,30 @@ bool ConfigUtils::isValidServerName(const std::string &name) {
     return false;
   if (name == "*")
     return true;
-
-  if (name.size() > 2 && name.substr(0, 2) == "*.") {
+  if (name.size() > 2 && name.substr(0, 2) == "*.")
     return ConfigUtils::isValidServerName(name.substr(2));
-  }
-
   for (char c : name) {
-    if (!std::isalnum(c) && c != '.' && c != '-') {
+    if (!std::isalnum(c) && c != '.' && c != '-')
       return false;
-    }
   }
   return true;
 }
 
 bool ConfigUtils::isValidPath(const std::string &path) {
-  if (path.empty()) {
+  if (path.empty())
     return false;
-  }
-
-  if (path[0] != '/' && path[0] != '.') {
+  if (path[0] != '/' && path[0] != '.')
     return false;
-  }
-
-  if (!ValidationUtils::isPathSafe(path)) {
+  if (!ValidationUtils::isPathSafe(path))
     return false;
-  }
 
   size_t pos = 0;
   int dotdot_count = 0;
   while ((pos = path.find("../", pos)) != std::string::npos) {
     dotdot_count++;
-    if (dotdot_count > 2) {
+    if (dotdot_count > 2)
       return false;
-    }
     pos += 3;
   }
-
   return true;
 }

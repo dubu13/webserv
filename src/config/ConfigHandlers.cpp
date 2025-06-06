@@ -38,26 +38,23 @@ void Config::handleListen(const std::string &value, ServerBlock &server) {
 }
 
 void Config::handleHost(const std::string &value, ServerBlock &server) {
-  if (!ConfigUtils::isValidIPv4(value)) {
+  if (!ConfigUtils::isValidIPv4(value))
     throw std::invalid_argument("Invalid host IP: " + value);
-  }
   server.host = value;
 }
 
 void Config::handleServerName(const std::string &value, ServerBlock &server) {
   auto names = ConfigUtils::parseMultiValue(value);
   for (const auto &name : names) {
-    if (!ConfigUtils::isValidServerName(name)) {
+    if (!ConfigUtils::isValidServerName(name))
       throw std::invalid_argument("Invalid server name: " + name);
-    }
     server.serverNames.push_back(name);
   }
 }
 
 void Config::handleRoot(const std::string &value, ServerBlock &server) {
-  if (!ConfigUtils::isValidPath(value)) {
+  if (!ConfigUtils::isValidPath(value))
     throw std::invalid_argument("Invalid root path: " + value);
-  }
   server.root = value;
 }
 
@@ -77,9 +74,8 @@ void Config::handleClientMaxBodySize(const std::string &value,
 
 void Config::handleLocationRoot(const std::string &value,
                                 LocationBlock &location) {
-  if (!ConfigUtils::isValidPath(value)) {
+  if (!ConfigUtils::isValidPath(value))
     throw std::invalid_argument("Invalid location root: " + value);
-  }
   location.root = value;
 }
 
@@ -92,9 +88,8 @@ void Config::handleMethods(const std::string &value, LocationBlock &location) {
   auto methods = ConfigUtils::parseMultiValue(value);
   location.allowedMethods.clear();
   for (const auto &method : methods) {
-    if (!ConfigUtils::isValidMethod(method)) {
+    if (!ConfigUtils::isValidMethod(method))
       throw std::invalid_argument("Invalid HTTP method: " + method);
-    }
     location.allowedMethods.insert(method);
   }
 }
