@@ -1,10 +1,10 @@
 #pragma once
-#include <string>
-#include <vector>
 #include <map>
 #include <set>
-#include <unordered_map>
 #include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 struct LocationBlock;
 struct ServerBlock;
@@ -14,48 +14,50 @@ struct ServerBlock;
 
 class Config {
 private:
-    std::string _fileName;
-    std::unordered_map<std::string, ServerBlock> _servers;
+  std::string _fileName;
+  std::unordered_map<std::string, ServerBlock> _servers;
 
-    using ServerDirectiveHandler = void (Config::*)(const std::string&, ServerBlock&);
-    using LocationDirectiveHandler = void (Config::*)(const std::string&, LocationBlock&);
+  using ServerDirectiveHandler = void (Config::*)(const std::string &,
+                                                  ServerBlock &);
+  using LocationDirectiveHandler = void (Config::*)(const std::string &,
+                                                    LocationBlock &);
 
-    std::unordered_map<std::string, ServerDirectiveHandler> _serverHandlers;
-    std::unordered_map<std::string, LocationDirectiveHandler> _locationHandlers;
+  std::unordered_map<std::string, ServerDirectiveHandler> _serverHandlers;
+  std::unordered_map<std::string, LocationDirectiveHandler> _locationHandlers;
 
-    void initializeHandlers();
-    void initializeServerHandlers();
-    void initializeLocationHandlers();
+  void initializeHandlers();
+  void initializeServerHandlers();
+  void initializeLocationHandlers();
 
-    void parseServerBlock(const std::string& content, ServerBlock& server);
-    void parseLocationBlock(const std::string& content, LocationBlock& location);
+  void parseServerBlock(const std::string &content, ServerBlock &server);
+  void parseLocationBlock(const std::string &content, LocationBlock &location);
 
 public:
-    explicit Config(const std::string& fileName);
+  explicit Config(const std::string &fileName);
 
-    void parseFromFile();
+  void parseFromFile();
 
-    const std::unordered_map<std::string, ServerBlock>& getServers() const;
-    const ServerBlock* getServer(const std::string& host, int port) const;
+  const std::unordered_map<std::string, ServerBlock> &getServers() const;
+  const ServerBlock *getServer(const std::string &host, int port) const;
 
 private:
+  void handleListen(const std::string &value, ServerBlock &server);
+  void handleHost(const std::string &value, ServerBlock &server);
+  void handleServerName(const std::string &value, ServerBlock &server);
+  void handleRoot(const std::string &value, ServerBlock &server);
+  void handleIndex(const std::string &value, ServerBlock &server);
+  void handleErrorPage(const std::string &value, ServerBlock &server);
+  void handleClientMaxBodySize(const std::string &value, ServerBlock &server);
 
-    void handleListen(const std::string& value, ServerBlock& server);
-    void handleHost(const std::string& value, ServerBlock& server);
-    void handleServerName(const std::string& value, ServerBlock& server);
-    void handleRoot(const std::string& value, ServerBlock& server);
-    void handleIndex(const std::string& value, ServerBlock& server);
-    void handleErrorPage(const std::string& value, ServerBlock& server);
-    void handleClientMaxBodySize(const std::string& value, ServerBlock& server);
-
-    void handleLocationRoot(const std::string& value, LocationBlock& location);
-    void handleLocationIndex(const std::string& value, LocationBlock& location);
-    void handleMethods(const std::string& value, LocationBlock& location);
-    void handleAutoindex(const std::string& value, LocationBlock& location);
-    void handleUploadStore(const std::string& value, LocationBlock& location);
-    void handleUploadEnable(const std::string& value, LocationBlock& location);
-    void handleReturn(const std::string& value, LocationBlock& location);
-    void handleCgiExt(const std::string& value, LocationBlock& location);
-    void handleCgiPath(const std::string& value, LocationBlock& location);
-    void handleLocationClientMaxBodySize(const std::string& value, LocationBlock& location);
+  void handleLocationRoot(const std::string &value, LocationBlock &location);
+  void handleLocationIndex(const std::string &value, LocationBlock &location);
+  void handleMethods(const std::string &value, LocationBlock &location);
+  void handleAutoindex(const std::string &value, LocationBlock &location);
+  void handleUploadStore(const std::string &value, LocationBlock &location);
+  void handleUploadEnable(const std::string &value, LocationBlock &location);
+  void handleReturn(const std::string &value, LocationBlock &location);
+  void handleCgiExt(const std::string &value, LocationBlock &location);
+  void handleCgiPath(const std::string &value, LocationBlock &location);
+  void handleLocationClientMaxBodySize(const std::string &value,
+                                       LocationBlock &location);
 };

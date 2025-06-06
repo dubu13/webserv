@@ -1,13 +1,13 @@
 #pragma once
-#include "HTTP/core/HTTPTypes.hpp"
 #include "HTTP/core/HTTPParser.hpp"
+#include "HTTP/core/HTTPTypes.hpp"
+#include <iostream>
 #include <map>
+#include <sstream>
 #include <string>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
-#include <sstream>
-#include <iostream>
-#include <sys/wait.h>
 
 using HTTP::Request;
 
@@ -18,6 +18,7 @@ private:
   std::string executeScript(const std::string &script_path,
                             const std::string &handler_path,
                             const Request &request);
+
 public:
   CGIHandler(const std::string &root = "./www");
   ~CGIHandler();
