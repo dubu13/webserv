@@ -18,6 +18,10 @@ using HTTP::methodToString;
 std::string MethodHandler::handleRequest(const Request& request, std::string_view root, const RequestRouter* router) {
     if (router) {
         const LocationBlock* location = router->findLocation(request.requestLine.uri);
+        if (!location) {
+            Logger::warn("Location not found for URI: " + request.requestLine.uri);
+            return ErrorResponseBuilder::buildResponse(404);
+        }
         std::string redirectResponse = router->handleRedirection(location);
         if (!redirectResponse.empty())
             return redirectResponse;
