@@ -113,11 +113,9 @@ void Config::parseLocationBlock(const std::string &content,
     auto [directive, value] = ConfigUtils::parseDirective(line);
     if (directive.empty() || directive.find("location ") == 0)
       continue;
-
     auto it = _locationHandlers.find(directive);
-    if (it != _locationHandlers.end()) {
+    if (it != _locationHandlers.end())
       (this->*(it->second))(value, location);
-    }
   }
 }
 

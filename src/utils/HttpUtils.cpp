@@ -36,16 +36,13 @@ std::string HttpUtils::urlDecode(std::string_view encoded) {
       if (end == hex + 2) {
         result += static_cast<char>(value);
         i += 2;
-      } else {
+      } else
         result += encoded[i];
-      }
-    } else if (encoded[i] == '+') {
+    } else if (encoded[i] == '+')
       result += ' ';
-    } else {
+    else
       result += encoded[i];
-    }
   }
-
   return result;
 }
 

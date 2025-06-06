@@ -11,9 +11,8 @@ ServerBlock::findBestLocationMatch(const std::string &path) const {
 
   if (cleanPath == "/") {
     auto it = locations.find("/");
-    if (it != locations.end()) {
+    if (it != locations.end())
       return &it->second;
-    }
     return nullptr;
   }
 
@@ -22,23 +21,18 @@ ServerBlock::findBestLocationMatch(const std::string &path) const {
 
   for (const auto &[prefix, location] : locations) {
 
-    if (prefix == "/" && cleanPath != "/") {
+    if (prefix == "/" && cleanPath != "/")
       continue;
-    }
-
     if (cleanPath.find(prefix) == 0) {
 
       if (prefix.length() > 1 && cleanPath.length() > prefix.length() &&
-          cleanPath[prefix.length()] != '/') {
+          cleanPath[prefix.length()] != '/')
         continue;
-      }
-
       if (prefix.length() > bestMatchLength) {
         bestMatch = &location;
         bestMatchLength = prefix.length();
       }
     }
   }
-
   return bestMatch;
 }
