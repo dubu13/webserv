@@ -74,11 +74,16 @@ private:
             std::vector<std::string> values = {toString(std::forward<Args>(args))...};
 
             size_t argIndex = 0;
-            for (char c : format) {
-                if (c == '%' && argIndex < values.size()) {
+            for (size_t i = 0; i < format.size(); ++i) {
+                if (format[i] == '%' && argIndex < values.size()) {
                     result << values[argIndex++];
-                } else if (c != '%') {
-                    result << c;
+                    // Skip format specifier characters after %
+                    while (i + 1 < format.size() && 
+                           (std::isalpha(format[i + 1]) || std::isdigit(format[i + 1]))) {
+                        ++i;
+                    }
+                } else if (format[i] != '%') {
+                    result << format[i];
                 }
             }
             return result.str();
