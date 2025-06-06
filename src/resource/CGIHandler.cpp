@@ -1,17 +1,18 @@
 #include "CGIHandler.hpp"
-#include "HTTP/core/HttpResponse.hpp"
 #include "HTTP/core/ErrorResponseBuilder.hpp"
+#include "HTTP/core/HttpResponse.hpp"
 #include "utils/Logger.hpp"
 #include "utils/Utils.hpp"
 
-using HTTP::Request;
 using HTTP::Method;
-using HTTP::StatusCode;
 using HTTP::methodToString;
+using HTTP::Request;
+using HTTP::StatusCode;
 using HTTP::statusToString;
 
 CGIHandler::CGIHandler(const std::string &root) : _root_directory(root) {
-  Logger::logf<LogLevel::INFO>("CGIHandler initialized with root directory: %s", root.c_str());
+  Logger::logf<LogLevel::INFO>("CGIHandler initialized with root directory: %s",
+                               root.c_str());
   registerHandler(".php", "/usr/bin/php");
   registerHandler(".py", "/usr/bin/python3");
   registerHandler(".pl", "/usr/bin/perl");
@@ -28,7 +29,8 @@ bool CGIHandler::canHandle(const std::string &filePath) const {
   return _cgi_handlers.find(extension) != _cgi_handlers.end();
 }
 
-std::string CGIHandler::executeCGI(const std::string &uri, const Request &request) {
+std::string CGIHandler::executeCGI(const std::string &uri,
+                                   const Request &request) {
   std::string filePath = _root_directory + uri;
   size_t dot_pos = filePath.find_last_of('.');
 
@@ -89,22 +91,27 @@ std::string CGIHandler::executeScript(const std::string &script_path,
 
     std::vector<std::string> env_vars;
     env_vars.emplace_back("GATEWAY_INTERFACE=CGI/1.1");
-    env_vars.emplace_back("REQUEST_METHOD=" + methodToString(request.requestLine.method));
+    env_vars.emplace_back("REQUEST_METHOD=" +
+                          methodToString(request.requestLine.method));
     env_vars.emplace_back("SCRIPT_NAME=" + script_path);
     env_vars.emplace_back("SERVER_PROTOCOL=" + request.requestLine.version);
     env_vars.emplace_back("SERVER_SOFTWARE=webserv/1.0");
 
     size_t pos = request.requestLine.uri.find('?');
-    std::string queryStr = (pos != std::string::npos) ? request.requestLine.uri.substr(pos + 1) : "";
+    std::string queryStr = (pos != std::string::npos)
+                               ? request.requestLine.uri.substr(pos + 1)
+                               : "";
     env_vars.emplace_back("QUERY_STRING=" + queryStr);
 
-    if (auto it = request.headers.find("CONTENT_TYPE"); it != request.headers.end())
+    if (auto it = request.headers.find("CONTENT_TYPE");
+        it != request.headers.end())
       env_vars.emplace_back("CONTENT_TYPE=" + it->second);
-    if (auto it = request.headers.find("CONTENT_LENGTH"); it != request.headers.end())
+    if (auto it = request.headers.find("CONTENT_LENGTH");
+        it != request.headers.end())
       env_vars.emplace_back("CONTENT_LENGTH=" + it->second);
 
     std::vector<char *> envp;
-    for (auto& env : env_vars)
+    for (auto &env : env_vars)
       envp.push_back(const_cast<char *>(env.c_str()));
     envp.push_back(nullptr);
 
@@ -134,7 +141,7 @@ std::string CGIHandler::executeScript(const std::string &script_path,
   return parseCGIOutput(output.str());
 }
 
-std::string CGIHandler::parseCGIOutput(const std::string& output){
+std::string CGIHandler::parseCGIOutput(const std::string &output) {
   size_t header_end = output.find("\r\n\r\n");
   size_t header_separator_len = 4;
 
@@ -171,8 +178,7 @@ std::string CGIHandler::parseCGIOutput(const std::string& output){
         } catch (...) {
           return ErrorResponseBuilder::buildResponse(500);
         }
-      }
-      else
+      } else
         headers[key] = value;
     }
   }
@@ -181,8 +187,8 @@ std::string CGIHandler::parseCGIOutput(const std::string& output){
 
   HttpResponse response;
   response.status(static_cast<int>(status_code), statusToString(status_code))
-          .body(body, headers["Content-Type"]);
-  for (const auto& header : headers) {
+      .body(body, headers["Content-Type"]);
+  for (const auto &header : headers) {
     if (header.first != "Content-Type") {
       response.header(header.first, header.second);
     }
@@ -191,7 +197,8 @@ std::string CGIHandler::parseCGIOutput(const std::string& output){
   return response.str();
 }
 
-void CGIHandler::registerHandler(const std::string &extension, const std::string &handlerPath) {
+void CGIHandler::registerHandler(const std::string &extension,
+                                 const std::string &handlerPath) {
   _cgi_handlers[extension] = handlerPath;
 }
 
