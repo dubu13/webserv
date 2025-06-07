@@ -6,7 +6,7 @@
 
 namespace HTTP {
 
-enum class Method { GET, POST, DELETE, UNKNOWN };
+enum class Method { GET, POST, DELETE, OPTIONS, UNKNOWN };
 
 enum class StatusCode {
   OK = 200,
@@ -22,6 +22,7 @@ enum class StatusCode {
   REQUEST_TIMEOUT = 408,
   CONFLICT = 409,
   PAYLOAD_TOO_LARGE = 413,
+  URI_TOO_LONG = 414,
   INTERNAL_SERVER_ERROR = 500,
   NOT_IMPLEMENTED = 501
 };
@@ -64,14 +65,13 @@ inline std::string statusToString(StatusCode status) {
           {StatusCode::METHOD_NOT_ALLOWED, "Method Not Allowed"},
           {StatusCode::CONFLICT, "Conflict"},
           {StatusCode::PAYLOAD_TOO_LARGE, "Payload Too Large"},
+          {StatusCode::URI_TOO_LONG, "URI Too Long"},
           {StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error"},
           {StatusCode::NOT_IMPLEMENTED, "Not Implemented"},
           {StatusCode::REQUEST_TIMEOUT, "Request Timeout"}};
-
   auto it = statusToStringMap.find(status);
-  if (it != statusToStringMap.end()) {
+  if (it != statusToStringMap.end())
     return std::string(it->second);
-  }
   return "Unknown";
 }
 

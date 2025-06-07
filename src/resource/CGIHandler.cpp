@@ -3,6 +3,7 @@
 #include "HTTP/core/HttpResponse.hpp"
 #include "utils/Logger.hpp"
 #include "utils/Utils.hpp"
+#include <fcntl.h>
 
 using HTTP::Method;
 using HTTP::methodToString;
@@ -31,7 +32,16 @@ bool CGIHandler::canHandle(const std::string &filePath) const {
 
 std::string CGIHandler::executeCGI(const std::string &uri,
                                    const Request &request) {
-  std::string filePath = _root_directory + uri;
+  std::string cleanUri = uri;
+  if (!cleanUri.empty() && cleanUri[0] == '/') {
+    cleanUri = cleanUri.substr(1);
+  }
+  std::string filePath = _root_directory;
+  if (!filePath.empty() && filePath.back() != '/') {
+    filePath += "/";
+  }
+  filePath += cleanUri;
+  
   size_t dot_pos = filePath.find_last_of('.');
 
   if (dot_pos == std::string::npos)
@@ -128,17 +138,37 @@ std::string CGIHandler::executeScript(const std::string &script_path,
   std::ostringstream output;
   char buffer[4096];
   ssize_t bytesRead;
-  while ((bytesRead = read(pipefd[0], buffer, sizeof(buffer))) > 0) {
+  if (fcntl(pipefd[0], F_SETFL, O_NONBLOCK) < 0) {
+    close(pipefd[0]);
+    kill(pid, SIGTERM);
+    waitpid(pid, nullptr, 0);
+    return ErrorResponseBuilder::buildResponse(500);
+  }
+  bytesRead = read(pipefd[0], buffer, sizeof(buffer));
+  if (bytesRead > 0) {
     output.write(buffer, bytesRead);
   }
-  close(pipefd[0]);
   int status;
-  waitpid(pid, &status, 0);
-
-  if (WIFEXITED(status) && WEXITSTATUS(status) != 0)
-    return ErrorResponseBuilder::buildResponse(500);
-
-  return parseCGIOutput(output.str());
+  int waitResult = waitpid(pid, &status, WNOHANG);
+  
+  if (waitResult == 0) {
+    usleep(100000);
+    waitResult = waitpid(pid, &status, WNOHANG);
+  }
+  
+  if (waitResult > 0) {
+    while ((bytesRead = read(pipefd[0], buffer, sizeof(buffer))) > 0) {
+      output.write(buffer, bytesRead);
+    }
+    close(pipefd[0]);
+    if (WIFEXITED(status) && WEXITSTATUS(status) != 0)
+      return ErrorResponseBuilder::buildResponse(500); 
+    return parseCGIOutput(output.str());
+  }
+  close(pipefd[0]);
+  kill(pid, SIGTERM);
+  waitpid(pid, nullptr, 0);
+  return ErrorResponseBuilder::buildResponse(500);
 }
 
 std::string CGIHandler::parseCGIOutput(const std::string &output) {

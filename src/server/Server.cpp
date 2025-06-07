@@ -50,8 +50,7 @@ int Server::setupSocket() {
     return -1;
   }
 
-  int flags = fcntl(_serverFd, F_GETFL, 0);
-  if (flags < 0 || fcntl(_serverFd, F_SETFL, flags | O_NONBLOCK) < 0) {
+  if (fcntl(_serverFd, F_SETFL, O_NONBLOCK) < 0) {
     Logger::error("Failed to set non-blocking mode");
     close(_serverFd);
     _serverFd = -1;
@@ -87,8 +86,6 @@ int Server::acceptConnection() {
   socklen_t addrLen = sizeof(clientAddr);
   int clientFd = accept(_serverFd, (struct sockaddr *)&clientAddr, &addrLen);
   if (clientFd < 0) {
-    if (errno != EAGAIN && errno != EWOULDBLOCK)
-      Logger::error("Failed to accept connection");
     return -1;
   }
   if (fcntl(clientFd, F_SETFL, O_NONBLOCK) < 0) {
@@ -107,9 +104,6 @@ void Server::handleClient(int fd) {
   ssize_t bytesRead = recv(fd, buffer, sizeof(buffer) - 1, 0);
 
   if (bytesRead <= 0) {
-    if (bytesRead < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-      return;
-    }
     removeClient(fd);
     return;
   }
@@ -120,8 +114,9 @@ void Server::handleClient(int fd) {
     return;
   try {
     Request request;
-    if (!parseRequest(_clientBuffers[fd], request)) {
-      sendErrorToClient(fd, 400);
+    auto parseResult = parseRequest(_clientBuffers[fd], request);
+    if (!parseResult.success) {
+      sendErrorToClient(fd, parseResult.statusCode);
       removeClient(fd);
       return;
     }
@@ -130,11 +125,16 @@ void Server::handleClient(int fd) {
       root = _config->root;
     std::string responseStr =
         MethodHandler::handleRequest(request, root, &_router);
-    if (responseStr.find("Connection:") == std::string::npos) {
-      size_t headerEnd = responseStr.find("\r\n\r\n");
-      if (headerEnd != std::string::npos)
+
+    size_t headerEnd = responseStr.find("\r\n\r\n");
+    if (headerEnd != std::string::npos) {
+      std::string headers = responseStr.substr(0, headerEnd);
+      if (headers.find("\r\nConnection: ") == std::string::npos &&
+          headers.find("Connection: ") != 0) {
         responseStr.insert(headerEnd, "\r\nConnection: close");
+      }
     }
+
     send(fd, responseStr.c_str(), responseStr.length(), MSG_NOSIGNAL);
     removeClient(fd);
 
@@ -173,6 +173,9 @@ void Server::sendErrorToClient(int fd, int statusCode) {
   try {
     std::string errorResponse = ErrorResponseBuilder::buildResponse(statusCode);
     send(fd, errorResponse.c_str(), errorResponse.length(), MSG_NOSIGNAL);
+  } catch (const std::exception &e) {
+    Logger::logf<LogLevel::ERROR>("Failed to send error response to client fd=%d: %s", fd, e.what());
   } catch (...) {
+    Logger::logf<LogLevel::ERROR>("Unknown error sending response to client fd=%d", fd);
   }
 }

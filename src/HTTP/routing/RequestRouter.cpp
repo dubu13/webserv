@@ -6,6 +6,8 @@ RequestRouter::RequestRouter(const ServerBlock *config) : _config(config) {}
 
 const LocationBlock *RequestRouter::findLocation(const std::string &uri) const {
 
+  std::string cleanUri = HttpUtils::cleanUri(uri);
+
   if (!_config) {
     Logger::logf<LogLevel::WARN>("No config available, using default location");
     static LocationBlock defaultLocation;
@@ -14,19 +16,15 @@ const LocationBlock *RequestRouter::findLocation(const std::string &uri) const {
     return &defaultLocation;
   }
 
-  if (_config->locations.empty()) {
+  if (_config->locations.empty())
     Logger::logf<LogLevel::INFO>(
         "No location blocks configured, using default location for URI: %s",
-        uri.c_str());
-    static LocationBlock defaultLocation;
-    defaultLocation.path = "/";
-    defaultLocation.allowedMethods = {"GET", "POST", "DELETE"};
-    return &defaultLocation;
-  }
-
+        cleanUri.c_str());
   for (const auto &[path, location] : _config->locations) {
-    if (location.path == uri)
+    if (cleanUri == path) {
+      Logger::logf<LogLevel::INFO>("Found exact location match for URI %s: %s", cleanUri.c_str(), path.c_str());
       return &location;
+    }
   }
 
   const LocationBlock *bestMatch = nullptr;
@@ -34,32 +32,33 @@ const LocationBlock *RequestRouter::findLocation(const std::string &uri) const {
 
   for (const auto &[path, location] : _config->locations) {
 
-    if (uri.find(location.path) == 0 && location.path.length() > longestMatch) {
+    bool isValidPrefix = false;
+    if (cleanUri.length() >= path.length()) {
+      if (cleanUri.substr(0, path.length()) == path) {
 
-      if (location.path == "/" || location.path.back() == '/' ||
-          uri.length() == location.path.length() ||
-          uri[location.path.length()] == '/') {
-        bestMatch = &location;
-        longestMatch = location.path.length();
+        if (cleanUri.length() == path.length() ||
+            cleanUri[path.length()] == '/' ||
+            path.back() == '/') {
+          isValidPrefix = true;
+        }
       }
+    }
+
+    if (isValidPrefix && path.length() > longestMatch) {
+      bestMatch = &location;
+      longestMatch = path.length();
     }
   }
+
   if (!bestMatch) {
-    for (const auto &[path, location] : _config->locations) {
-      if (location.path == "/") {
-        Logger::logf<LogLevel::INFO>("Using root location for URI: %s",
-                                     uri.c_str());
-        return &location;
-      }
-    }
-    Logger::logf<LogLevel::WARN>("No location found for URI: %s, using default",
-                                 uri.c_str());
+
     static LocationBlock defaultLocation;
     defaultLocation.path = "/";
     defaultLocation.allowedMethods = {"GET", "POST", "DELETE"};
-    return &defaultLocation;
+    bestMatch = &defaultLocation;
   }
-  Logger::logf<LogLevel::INFO>("Found location for URI %s: %s", uri.c_str(),
+
+  Logger::logf<LogLevel::INFO>("Found location for URI %s: %s", cleanUri.c_str(),
                                bestMatch->path.c_str());
   return bestMatch;
 }
@@ -74,9 +73,12 @@ std::string RequestRouter::resolveRoot(const LocationBlock *location) const {
 
 bool RequestRouter::isMethodAllowed(const Request &request,
                                     const LocationBlock *location) const {
-  if (!location || location->allowedMethods.empty())
+  if (!location || location->allowedMethods.empty()) {
     return true;
+  }
+
   std::string methodStr = methodToString(request.requestLine.method);
+
   bool allowed = location->allowedMethods.find(methodStr) !=
                  location->allowedMethods.end();
   return allowed;
@@ -97,15 +99,17 @@ std::string
 RequestRouter::handleRedirection(const LocationBlock *location) const {
   if (!hasRedirection(location))
     return "";
+
   std::string target = getRedirectionTarget(location);
   int code = 302;
   std::string redirectUrl = target;
 
   size_t spacePos = target.find(' ');
   if (spacePos != std::string::npos) {
-    std::string codeStr = target.substr(0, spacePos);
+
     try {
-      int parsedCode = std::stoi(codeStr);
+      int parsedCode = std::stoi(target.substr(0, spacePos));
+
       if (parsedCode == 301 || parsedCode == 302 || parsedCode == 303 ||
           parsedCode == 307 || parsedCode == 308) {
         code = parsedCode;
@@ -116,7 +120,33 @@ RequestRouter::handleRedirection(const LocationBlock *location) const {
                                     e.what());
     }
   }
+
   Logger::logf<LogLevel::INFO>("Performing redirection to %s with code %d",
                                redirectUrl.c_str(), code);
   return HttpResponse::redirect(redirectUrl, code).str();
+}
+
+std::string RequestRouter::getIndexFile(const LocationBlock *location) const {
+
+  if (location && !location->index.empty())
+    return location->index;
+  if (_config && !_config->index.empty())
+    return _config->index;
+  return "index.html";
+}
+
+std::string RequestRouter::getRelativePath(const std::string &uri, const LocationBlock *location) const {
+
+  std::string cleanUri = HttpUtils::cleanUri(uri);
+  if (!location || location->path.empty() || location->path == "/") 
+    return cleanUri;
+
+  if (cleanUri.length() >= location->path.length() &&
+      cleanUri.substr(0, location->path.length()) == location->path) {
+    std::string relativePath = cleanUri.substr(location->path.length());
+    if (relativePath.empty() || relativePath[0] != '/')
+      relativePath = "/" + relativePath;
+    return relativePath;
+  }
+  return cleanUri;
 }

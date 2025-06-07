@@ -40,7 +40,7 @@ void ServerManager::initializeServers(const Config &config) {
     }
   }
 
-  Logger::logf<LogLevel::INFO>("Initialized % servers", _servers.size());
+  Logger::logf<LogLevel::INFO>("Initialized %s servers", std::to_string(_servers.size()).c_str());
 }
 
 void ServerManager::setupServerSockets() {
@@ -52,10 +52,11 @@ void ServerManager::setupServerSockets() {
     }
 
     _socketToServerMap[serverFd] = i;
-
     _poller.add(serverFd, POLLIN);
 
-    Logger::logf<LogLevel::INFO>("Server % listening on fd %", i, serverFd);
+    Logger::logf<LogLevel::INFO>("Server %s listening on fd %s",
+                                 std::to_string(i).c_str(),
+                                 std::to_string(serverFd).c_str());
   }
   Logger::logf<LogLevel::INFO>("All server sockets initialized");
 }
@@ -79,7 +80,7 @@ bool ServerManager::start() {
     Logger::logf<LogLevel::INFO>("Server manager stopped");
     return true;
   } catch (const std::exception &e) {
-    Logger::logf<LogLevel::ERROR>("Error in server manager: %", e.what());
+    Logger::logf<LogLevel::ERROR>("Error in server manager: %s", e.what());
     return false;
   }
 }
@@ -102,8 +103,7 @@ bool ServerManager::processEvents(int timeout) {
       try {
         dispatchEvent(pfd);
       } catch (const std::exception &e) {
-        Logger::logf<LogLevel::ERROR>("Error dispatching event: %", e.what());
-      }
+        Logger::logf<LogLevel::ERROR>("Error dispatching event: %s", e.what()); }
     }
 
     return true;
@@ -112,39 +112,32 @@ bool ServerManager::processEvents(int timeout) {
       Logger::logf<LogLevel::WARN>("Poll interrupted by signal");
       return true;
     }
-
-    Logger::logf<LogLevel::ERROR>("Error processing events: %", e.what());
+    Logger::logf<LogLevel::ERROR>("Error processing events: %s", e.what());
     return false;
   }
 }
 
 void ServerManager::dispatchEvent(const struct pollfd &pfd) {
-
   auto serverIt = _socketToServerMap.find(pfd.fd);
 
   if (serverIt != _socketToServerMap.end()) {
-
     size_t serverIndex = serverIt->second;
     int clientFd = _servers[serverIndex]->acceptConnection();
-
-    if (clientFd > 0) {
-      _poller.add(clientFd, POLLIN | POLLOUT);
-    }
+    if (clientFd > 0)
+      _poller.add(clientFd, POLLIN);
     return;
   }
 
   for (auto &server : _servers) {
     if (server->hasClient(pfd.fd)) {
       server->handleClient(pfd.fd);
-
-      if (!server->hasClient(pfd.fd)) {
+      if (!server->hasClient(pfd.fd))
         _poller.remove(pfd.fd);
-      }
       return;
     }
   }
 
-  Logger::logf<LogLevel::WARN>("Unhandled socket event for fd: %", pfd.fd);
+  Logger::logf<LogLevel::WARN>("Unhandled socket event for fd: %d", pfd.fd);
   _poller.remove(pfd.fd);
   close(pfd.fd);
 }

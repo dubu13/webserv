@@ -34,9 +34,7 @@ public:
       auto it = cache.begin();
       cache.erase(it);
     }
-
     cache[path] = {content, mimeType};
   }
-
   void clearCache() { cache.clear(); }
 };

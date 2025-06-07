@@ -4,6 +4,7 @@
 #include "HTTP/routing/RequestRouter.hpp"
 #include "Poller.hpp"
 #include "ServerBlock.hpp"
+#include "resource/CGIHandler.hpp"
 #include <ctime>
 #include <map>
 #include <string>
@@ -16,6 +17,7 @@ private:
   Poller _poller;
   std::map<int, time_t> _clients;
   std::map<int, std::string> _clientBuffers;
+  std::map<int, int> _cgiToClient;
   const ServerBlock *_config;
   RequestRouter _router;
 
@@ -36,4 +38,5 @@ public:
 private:
   void removeClient(int fd);
   void sendErrorToClient(int fd, int statusCode);
+  void sendResponseToClient(int clientFd, const std::string& response);
 };

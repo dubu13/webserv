@@ -17,16 +17,14 @@ private:
 
 public:
   explicit RequestRouter(const ServerBlock *config);
-
   const LocationBlock *findLocation(const std::string &uri) const;
   std::string resolveRoot(const LocationBlock *location) const;
   bool isMethodAllowed(const Request &request,
                        const LocationBlock *location) const;
-
   bool hasRedirection(const LocationBlock *location) const;
   std::string getRedirectionTarget(const LocationBlock *location) const;
-
   std::string handleRedirection(const LocationBlock *location) const;
-
+  std::string getIndexFile(const LocationBlock *location) const;
+  std::string getRelativePath(const std::string &uri, const LocationBlock *location) const;
   const ServerBlock *getConfig() const { return _config; }
 };
