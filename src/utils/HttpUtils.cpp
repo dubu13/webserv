@@ -97,36 +97,80 @@ bool HttpUtils::findChunkEnd(std::string_view data, size_t &pos) {
 }
 
 bool HttpUtils::isCompleteRequest(const std::string &data) {
-
-  size_t headerEnd = data.find("\r\n\r\n");
-  if (headerEnd == std::string::npos) {
+  // Check if data has minimum viable request line
+  if (data.empty()) {
     return false;
   }
 
+  // Find first line end
+  size_t firstLineEnd = data.find("\r\n");
+  if (firstLineEnd == std::string::npos) {
+    // Request might be incomplete, but check for malformed requests
+    if (data.length() > 8192) { // Reasonable header size limit
+      return true; // Mark as complete to trigger error processing
+    }
+    return false;
+  }
+
+  // Validate request line format before proceeding
+  std::string requestLine = data.substr(0, firstLineEnd);
+  std::istringstream lineStream(requestLine);
+  std::string method, uri, version;
+  
+  // Check if request line has proper format (METHOD URI VERSION)
+  if (!(lineStream >> method >> uri >> version)) {
+    return true; // Mark as complete to trigger error processing
+  }
+
+  // Check for header-body separator
+  size_t headerEnd = data.find("\r\n\r\n");
+  if (headerEnd == std::string::npos) {
+    // Check if we have too much data without proper separator
+    if (data.length() > 8192) { // Reasonable header size limit
+      return true; // Mark as complete to trigger error processing
+    }
+    return false;
+  }
+
+  // Handle Content-Length
   size_t contentLengthPos = data.find("Content-Length: ");
   if (contentLengthPos != std::string::npos && contentLengthPos < headerEnd) {
     size_t valueStart = contentLengthPos + 16;
     size_t valueEnd = data.find("\r\n", valueStart);
     if (valueEnd != std::string::npos) {
       try {
-        size_t contentLength =
-            std::stoull(data.substr(valueStart, valueEnd - valueStart));
+        std::string lengthStr = data.substr(valueStart, valueEnd - valueStart);
+        // Validate content length format before parsing
+        for (char c : lengthStr) {
+          if (!std::isdigit(c)) {
+            return true; // Invalid format, mark as complete for error processing
+          }
+        }
+        size_t contentLength = std::stoull(lengthStr);
+        if (contentLength > 10485760) { // 10MB limit
+          return true; // Too large, mark as complete for error processing
+        }
         return data.length() >= headerEnd + 4 + contentLength;
       } catch (...) {
-        return false;
+        return true; // Invalid content length, mark as complete for error processing
       }
     }
   }
+
+  // Handle chunked transfer encoding
   size_t transferEncodingPos = data.find("Transfer-Encoding: chunked");
   if (transferEncodingPos != std::string::npos &&
       transferEncodingPos < headerEnd) {
     return data.find("0\r\n\r\n", headerEnd + 4) != std::string::npos;
   }
-  std::string method = data.substr(0, data.find(' '));
+
+  // For methods without body (GET, HEAD, DELETE), request is complete
   if (method == "GET" || method == "HEAD" || method == "DELETE") {
     return true;
   }
-  return false;
+
+  // For POST/PUT without Content-Length or Transfer-Encoding, malformed request
+  return true;
 }
 
 bool HttpUtils::isSecureRequest(const std::string &data) {

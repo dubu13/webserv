@@ -107,25 +107,42 @@ void Server::handleClient(int fd) {
     removeClient(fd);
     return;
   }
+  
   buffer[bytesRead] = '\0';
   _clientBuffers[fd] += std::string(buffer, bytesRead);
   _clients[fd] = std::time(nullptr);
+
+  // Check for oversized requests
+  if (_clientBuffers[fd].length() > 65536) { // 64KB limit
+    Logger::error("Client request too large, closing connection");
+    sendErrorToClient(fd, 413);
+    removeClient(fd);
+    return;
+  }
+
+  // Check if request is complete
   if (!HttpUtils::isCompleteRequest(_clientBuffers[fd]))
     return;
+
   try {
     Request request;
-    auto parseResult = parseRequest(_clientBuffers[fd], request);
+    auto parseResult = parseRequest(_clientBuffers[fd], request, &_router);
+    
     if (!parseResult.success) {
+      Logger::logf<LogLevel::WARN>("Parse failed with status %d", 
+                                   parseResult.statusCode);
       sendErrorToClient(fd, parseResult.statusCode);
       removeClient(fd);
       return;
     }
+
     std::string root = "./www";
     if (_config && !_config->root.empty())
       root = _config->root;
-    std::string responseStr =
-        MethodHandler::handleRequest(request, root, &_router);
+    
+    std::string responseStr = MethodHandler::handleRequest(request, root, &_router);
 
+    // Ensure Connection: close header for proper cleanup
     size_t headerEnd = responseStr.find("\r\n\r\n");
     if (headerEnd != std::string::npos) {
       std::string headers = responseStr.substr(0, headerEnd);
@@ -135,12 +152,17 @@ void Server::handleClient(int fd) {
       }
     }
 
-    send(fd, responseStr.c_str(), responseStr.length(), MSG_NOSIGNAL);
+    ssize_t sent = send(fd, responseStr.c_str(), responseStr.length(), MSG_NOSIGNAL);
+    if (sent < 0) {
+      Logger::error("Failed to send response to client");
+    }
+    
     removeClient(fd);
 
   } catch (const std::exception &e) {
     Logger::logf<LogLevel::ERROR>("Error handling client: %s", e.what());
     sendErrorToClient(fd, 500);
+    removeClient(fd);
   }
 }
 

@@ -7,6 +7,9 @@
 #include <string>
 #include <string_view>
 
+// Forward declarations
+class RequestRouter;
+
 namespace HTTP {
 
 struct RequestLine {
@@ -36,7 +39,7 @@ struct ParseResult {
     : success(success), statusCode(statusCode), errorMessage(errorMessage) {}
 };
 
-ParseResult parseRequest(const std::string &data, Request &request);
+ParseResult parseRequest(const std::string &data, Request &request, const RequestRouter *router = nullptr);
 bool parseRequestLine(std::string_view line, RequestLine &requestLine);
 bool parseHeaders(std::istringstream &stream,
                   std::map<std::string, std::string> &headers);
@@ -44,10 +47,10 @@ bool parseHeader(std::string_view line,
                  std::map<std::string, std::string> &headers);
 bool parseBody(std::string_view data, size_t bodyStart, std::string &body);
 bool parseChunkedBody(std::string_view data, size_t bodyStart,
-                      std::string &body);
+                     std::string &body, const std::string &uri, const RequestRouter *router);
 bool parseRequestBody(const std::string &data, size_t bodyStart,
-                      Request &request);
-bool parseContentLength(Request &request);
+                     Request &request, const RequestRouter *router);
+bool parseContentLengthWithRouter(Request &request, const RequestRouter *router);
 bool validateHttpRequest(const Request &request);
 
 struct MultipartFile {

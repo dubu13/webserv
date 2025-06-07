@@ -106,12 +106,42 @@ std::string CGIHandler::executeScript(const std::string &script_path,
     env_vars.emplace_back("SCRIPT_NAME=" + script_path);
     env_vars.emplace_back("SERVER_PROTOCOL=" + request.requestLine.version);
     env_vars.emplace_back("SERVER_SOFTWARE=webserv/1.0");
+    
+    // Add missing CGI environment variables
+    std::string serverName = "localhost";
+    if (auto it = request.headers.find("Host"); it != request.headers.end()) {
+      std::string host = it->second;
+      size_t colonPos = host.find(':');
+      serverName = (colonPos != std::string::npos) ? host.substr(0, colonPos) : host;
+    }
+    env_vars.emplace_back("SERVER_NAME=" + serverName);
+    env_vars.emplace_back("SERVER_PORT=8080");
 
     size_t pos = request.requestLine.uri.find('?');
     std::string queryStr = (pos != std::string::npos)
                                ? request.requestLine.uri.substr(pos + 1)
                                : "";
     env_vars.emplace_back("QUERY_STRING=" + queryStr);
+    
+    // Set PATH_INFO - for CGI, this should be the path after the script name
+    std::string pathInfo = "";
+    std::string requestUri = request.requestLine.uri;
+    if (pos != std::string::npos) {
+      requestUri = requestUri.substr(0, pos); // Remove query string
+    }
+    
+    // Find the script name in the URI and extract anything after it
+    size_t scriptNameStart = requestUri.find_last_of('/');
+    if (scriptNameStart != std::string::npos) {
+      std::string scriptName = requestUri.substr(scriptNameStart + 1);
+      size_t scriptExtPos = scriptName.find('.');
+      if (scriptExtPos != std::string::npos) {
+        // PATH_INFO is typically empty for simple script calls
+        // but could contain extra path segments in more complex setups
+        pathInfo = ""; // Most cases don't need PATH_INFO
+      }
+    }
+    env_vars.emplace_back("PATH_INFO=" + pathInfo);
 
     if (auto it = request.headers.find("CONTENT_TYPE");
         it != request.headers.end())
