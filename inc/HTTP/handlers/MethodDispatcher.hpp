@@ -15,15 +15,16 @@ public:
   static std::string handleRequest(const Request &request,
                                    std::string_view root = "./www",
                                    const RequestRouter *router = nullptr);
-
 private:
   static std::pair<std::string, std::string>
-  resolvePaths(const Request &request, std::string_view root);
-
+  resolvePaths(const Request &request, std::string_view root,
+               const RequestRouter *router = nullptr);
   static std::string handleGet(const Request &request, std::string_view root,
                                const RequestRouter *router = nullptr);
   static std::string handlePost(const Request &request, std::string_view root,
                                 const RequestRouter *router = nullptr);
   static std::string handleDelete(const Request &request, std::string_view root,
                                   const RequestRouter *router = nullptr);
+  static std::string handleFileUpload(const Request &request, const std::string &effectiveRoot,
+                                     std::string_view contentType, const RequestRouter *router);
 };

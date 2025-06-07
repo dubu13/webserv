@@ -13,13 +13,6 @@
 
 namespace HTTP {
 
-template <typename T>
-static bool validate(T condition, const std::string &errorMsg) {
-  if (!condition)
-    Logger::error(errorMsg);
-  return static_cast<bool>(condition);
-}
-
 static void cleanLineEnding(std::string &line) {
   if (!line.empty() && line.back() == '\r')
     line.pop_back();
@@ -35,25 +28,36 @@ static bool isValidHttpVersion(const std::string &version) {
   return version == "HTTP/1.1" || version == "HTTP/1.0";
 }
 
-bool parseRequest(const std::string &data, Request &request) {
+ParseResult parseRequest(const std::string &data, Request &request) {
   size_t headerEnd = data.find("\r\n\r\n");
-  if (!validate(headerEnd != std::string::npos,
-                "Malformed HTTP request: missing header-body separator"))
-    return false;
+  if (headerEnd == std::string::npos) {
+    Logger::error("Malformed HTTP request: missing header-body separator");
+    return ParseResult(false, 400, "Malformed HTTP request");
+  }
 
   std::istringstream stream(data.substr(0, headerEnd));
   std::string requestLineStr;
 
   if (!std::getline(stream, requestLineStr)) {
     Logger::error("Failed to read request line");
-    return false;
+    return ParseResult(false, 400, "Invalid request line");
   }
   cleanLineEnding(requestLineStr);
+  if (!parseRequestLine(requestLineStr, request.requestLine))
+    return ParseResult(false, 400, "Invalid request line format");
+  if (!parseHeaders(stream, request.headers))
+    return ParseResult(false, 400, "Invalid headers");
+  if (!validateHttpRequest(request))
+    return ParseResult(false, 400, "Invalid HTTP request");
+  if (!parseContentLength(request))
+    return ParseResult(false, 400, "Invalid Content-Length");
 
-  return parseRequestLine(requestLineStr, request.requestLine) &&
-         parseHeaders(stream, request.headers) &&
-         validateHttpRequest(request) && parseContentLength(request) &&
-         parseRequestBody(data, headerEnd + 4, request);
+  if (!parseRequestBody(data, headerEnd + 4, request)) {
+    if (request.body.length() > Constants::MAX_TOTAL_SIZE)
+      return ParseResult(false, 413, "Request entity too large");
+    return ParseResult(false, 400, "Invalid request body");
+  }
+  return ParseResult(true, 200, "");
 }
 
 bool parseRequestLine(std::string_view line, RequestLine &requestLine) {
@@ -64,18 +68,28 @@ bool parseRequestLine(std::string_view line, RequestLine &requestLine) {
     Logger::error("Invalid request line format");
     return false;
   }
-
   requestLine.method = stringToMethod(methodStr);
-  return validate(requestLine.method != Method::UNKNOWN,
-                  "Invalid HTTP method: " + methodStr) &&
-         validate(!requestLine.uri.empty() && requestLine.uri[0] == '/',
-                  "Invalid URI: must start with /") &&
-         validate(ValidationUtils::validateUriLength(requestLine.uri.length()),
-                  "URI too long") &&
-         validate(ValidationUtils::isPathSafe(requestLine.uri),
-                  "Unsafe URI path") &&
-         validate(isValidHttpVersion(requestLine.version),
-                  "Invalid HTTP version: " + requestLine.version);
+  if (requestLine.method == Method::UNKNOWN) {
+    Logger::error("Invalid HTTP method: " + methodStr);
+    return false;
+  }
+  if (requestLine.uri.empty() || requestLine.uri[0] != '/') {
+    Logger::error("Invalid URI: must start with /");
+    return false;
+  }
+  if (requestLine.uri.length() > Constants::MAX_URI_LENGTH) {
+    Logger::error("URI too long");
+    return false;
+  }
+  if (!ValidationUtils::isPathSafe(requestLine.uri)) {
+    Logger::error("Unsafe URI path");
+    return false;
+  }
+  if (!isValidHttpVersion(requestLine.version)) {
+    Logger::error("Invalid HTTP version: " + requestLine.version);
+    return false;
+  }
+  return true;
 }
 
 bool parseHeaders(std::istringstream &stream,
@@ -92,8 +106,10 @@ bool parseHeaders(std::istringstream &stream,
 bool parseHeader(std::string_view line,
                  std::map<std::string, std::string> &headers) {
   size_t colonPos = line.find(':');
-  if (!validate(colonPos != std::string::npos, "Invalid header format"))
+  if (colonPos == std::string::npos) {
+    Logger::error("Invalid header format");
     return false;
+  }
 
   headers[std::string(HttpUtils::trimWhitespace(line.substr(0, colonPos)))] =
       std::string(HttpUtils::trimWhitespace(line.substr(colonPos + 1)));
@@ -102,18 +118,25 @@ bool parseHeader(std::string_view line,
 
 bool parseContentLength(Request &request) {
   std::string contentLength = getHeader(request.headers, "Content-Length");
-  return contentLength.empty() ||
-         validate(ValidationUtils::validateContentLength(contentLength,
-                                                         request.contentLength),
-                  "Invalid Content-Length");
+  if (contentLength.empty())
+    return true;
+  if (!ValidationUtils::validateContentLength(contentLength, request.contentLength)) {
+    Logger::error("Invalid Content-Length");
+    return false;
+  }
+  return true;
 }
 
 bool validateHttpRequest(const Request &request) {
-  return validate(isValidHttpVersion(request.requestLine.version),
-                  "Unsupported version " + request.requestLine.version) &&
-         (request.requestLine.version != "HTTP/1.1" ||
-          validate(!getHeader(request.headers, "Host").empty(),
-                   "Missing Host header for HTTP/1.1"));
+  if (!isValidHttpVersion(request.requestLine.version)) {
+    Logger::error("Unsupported version " + request.requestLine.version);
+    return false;
+  }
+  if (request.requestLine.version == "HTTP/1.1" && getHeader(request.headers, "Host").empty()) {
+    Logger::error("Missing Host header for HTTP/1.1");
+    return false;
+  }
+  return true;
 }
 
 bool parseRequestBody(const std::string &data, size_t bodyStart,
@@ -125,10 +148,12 @@ bool parseRequestBody(const std::string &data, size_t bodyStart,
   bool success = request.chunkedTransfer
                      ? parseChunkedBody(data, bodyStart, request.body)
                      : parseBody(data, bodyStart, request.body);
-  if (!validate(success, request.chunkedTransfer
-                             ? "Failed to parse chunked body"
-                             : "Failed to parse request body"))
+  if (!success) {
+    Logger::error(request.chunkedTransfer
+                     ? "Failed to parse chunked body"
+                     : "Failed to parse request body");
     return false;
+  }
   std::string contentLength = getHeader(request.headers, "Content-Length");
   if (!contentLength.empty() && request.body.size() != request.contentLength)
     Logger::logf<LogLevel::WARN>(
@@ -144,26 +169,30 @@ bool parseChunkedBody(std::string_view data, size_t bodyStart,
 
   while (pos < data.length()) {
     size_t chunkSize;
-    if (!ValidationUtils::validateChunkCount(++chunkCount) ||
-        !HttpUtils::parseChunkSize(data, pos, chunkSize) ||
-        pos + chunkSize + 2 > data.length()) {
-      return validate(false, "HTTP/1.1 Error: Incomplete chunk data");
-    }
 
+    if (++chunkCount > Constants::MAX_CHUNK_COUNT) {
+      Logger::error("HTTP/1.1 Error: Too many chunks");
+      return false;
+    }
+    if (!HttpUtils::parseChunkSize(data, pos, chunkSize) ||
+        pos + chunkSize + 2 > data.length()) {
+      Logger::error("HTTP/1.1 Error: Incomplete chunk data");
+      return false;
+    }
     if (chunkSize == 0)
       return true;
-
     body.append(data.substr(pos, chunkSize));
     pos += chunkSize;
-
-    if (!ValidationUtils::validateChunkTerminator(data, pos) ||
-        !ValidationUtils::validateBodySize(body.length()))
-      return validate(false, chunkSize == 0
-                                 ? "HTTP/1.1 Error: Malformed chunked body"
-                                 : "Body size too large");
+    if (!ValidationUtils::validateChunkTerminator(data, pos))
+      return false;
+    if (body.length() > Constants::MAX_TOTAL_SIZE) {
+      Logger::error("HTTP/1.1 Error: Body size too large");
+      return false;
+    }
     pos += 2;
   }
-  return validate(false, "HTTP/1.1 Error: Malformed chunked body");
+  Logger::error("HTTP/1.1 Error: Malformed chunked body");
+  return false;
 }
 
 bool parseBody(std::string_view data, size_t bodyStart, std::string &body) {
@@ -192,28 +221,25 @@ std::vector<MultipartFile> parseMultipartData(const std::string &body,
   std::vector<MultipartFile> files;
   std::string boundary = extractBoundary(contentType);
 
-  if (!validate(!boundary.empty(),
-                "No boundary found in multipart content-type"))
+  if (boundary.empty()) {
+    Logger::error("No boundary found in multipart content-type");
     return files;
+  }
 
   std::string boundaryMarker = "--" + boundary;
   size_t pos = body.find(boundaryMarker);
 
   while (pos != std::string::npos) {
     pos += boundaryMarker.length();
-
     if (pos + 1 < body.length() && body.substr(pos, 2) == "--")
       break;
-
     pos = body.find("\r\n\r\n", pos);
     if (pos == std::string::npos)
       break;
     pos += 4;
-
     size_t nextBoundary = body.find("\r\n" + boundaryMarker, pos);
     if (nextBoundary == std::string::npos)
       break;
-
     MultipartFile file;
     size_t headerStart = body.rfind("filename=\"", pos);
     if (headerStart != std::string::npos && headerStart > pos - 200) {
@@ -229,5 +255,4 @@ std::vector<MultipartFile> parseMultipartData(const std::string &body,
   }
   return files;
 }
-
-} // namespace HTTP
+}

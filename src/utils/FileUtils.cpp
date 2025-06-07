@@ -51,12 +51,12 @@ static std::string readFileFromPath(const std::string &filePath,
 std::string FileUtils::readFile(std::string_view rootDir, std::string_view uri,
                                 StatusCode &status) {
   if (!rootDir.empty()) {
-    auto validation = ValidationUtils::validateFileAccess(rootDir, uri);
-    if (!validation.isValid) {
-      status = validation.status;
+    if (!ValidationUtils::isPathSafe(uri)) {
+      status = StatusCode::FORBIDDEN;
       return "";
     }
-    return readFileFromPath(validation.filePath, status);
+    std::string filePath = HttpUtils::buildPath(rootDir, uri);
+    return readFileFromPath(filePath, status);
   } else {
     return readFileFromPath(std::string(uri), status);
   }
@@ -64,14 +64,15 @@ std::string FileUtils::readFile(std::string_view rootDir, std::string_view uri,
 
 bool FileUtils::writeFile(std::string_view rootDir, std::string_view uri,
                           std::string_view content, StatusCode &status) {
-  auto validation = ValidationUtils::validateFileAccess(rootDir, uri);
-  if (!validation.isValid) {
-    status = validation.status;
+  if (!ValidationUtils::isPathSafe(uri)) {
+    status = StatusCode::FORBIDDEN;
     return false;
   }
 
-  if (writeFileContent(validation.filePath, content)) {
-    fileCache.cacheFile(validation.filePath, std::string(content), "text/html");
+  std::string filePath = HttpUtils::buildPath(rootDir, uri);
+
+  if (writeFileContent(filePath, content)) {
+    fileCache.cacheFile(filePath, std::string(content), "text/html");
     status = StatusCode::CREATED;
     return true;
   }
@@ -82,14 +83,18 @@ bool FileUtils::writeFile(std::string_view rootDir, std::string_view uri,
 
 bool FileUtils::deleteFile(std::string_view rootDir, std::string_view uri,
                            StatusCode &status) {
-  auto validation = ValidationUtils::validateFileAccess(rootDir, uri);
-  if (!validation.isValid) {
-    status = validation.status;
+  Logger::logf<LogLevel::INFO>("Attempting to delete file: %s", uri.data());
+  if (!ValidationUtils::isPathSafe(uri)) {
+    Logger::logf<LogLevel::ERROR>("Attempted to delete unsafe path: %s", uri.data());
+    status = StatusCode::FORBIDDEN;
     return false;
   }
 
+  std::string filePath = HttpUtils::buildPath(rootDir, uri);
+
+Logger::logf<LogLevel::INFO>("Resolved file path: %s", filePath.c_str());
   struct stat fileStat;
-  if (stat(validation.filePath.c_str(), &fileStat) != 0) {
+  if (stat(filePath.c_str(), &fileStat) != 0) {
     status = StatusCode::NOT_FOUND;
     return false;
   }
@@ -99,7 +104,7 @@ bool FileUtils::deleteFile(std::string_view rootDir, std::string_view uri,
     return false;
   }
 
-  if (unlink(validation.filePath.c_str()) == 0) {
+  if (unlink(filePath.c_str()) == 0) {
     status = StatusCode::NO_CONTENT;
     return true;
   }
@@ -184,12 +189,6 @@ bool FileUtils::writeFileContent(std::string_view filePath,
   file.write(content.data(), content.size());
   file.close();
   return file.good();
-}
-
-void FileUtils::clearCache() { fileCache.clearCache(); }
-
-void FileUtils::setCacheMaxSize(size_t maxSize) {
-  fileCache = FileCache(maxSize);
 }
 
 bool FileUtils::exists(std::string_view path) {

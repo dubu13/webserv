@@ -33,9 +33,10 @@ std::vector<struct pollfd> Poller::poll(int timeout) {
   if (_fds.empty())
     return result;
   int ret = ::poll(_fds.data(), _fds.size(), timeout);
-  if (ret < 0)
+  if (ret < 0) {
     Logger::logf<LogLevel::ERROR>("Poll error: %s", strerror(errno));
-  return result;
+    return result;
+  }
   if (ret == 0)
     return result;
   for (const auto &pfd : _fds) {

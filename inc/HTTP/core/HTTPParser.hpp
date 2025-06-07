@@ -27,7 +27,16 @@ struct Request {
   std::string contentType;
 };
 
-bool parseRequest(const std::string &data, Request &request);
+struct ParseResult {
+  bool success;
+  int statusCode;  // HTTP status code for error responses
+  std::string errorMessage;
+  
+  ParseResult(bool success = true, int statusCode = 200, const std::string& errorMessage = "") 
+    : success(success), statusCode(statusCode), errorMessage(errorMessage) {}
+};
+
+ParseResult parseRequest(const std::string &data, Request &request);
 bool parseRequestLine(std::string_view line, RequestLine &requestLine);
 bool parseHeaders(std::istringstream &stream,
                   std::map<std::string, std::string> &headers);

@@ -77,7 +77,8 @@ bool HttpUtils::parseChunkSize(std::string_view data, size_t &pos,
     return false;
   }
 
-  if (!ValidationUtils::validateChunkSize(chunkSize)) {
+  if (chunkSize > Constants::MAX_CHUNK_SIZE) {
+    Logger::error("HTTP/1.1 Error: Chunk size too large");
     return false;
   }
 
@@ -116,15 +117,16 @@ bool HttpUtils::isCompleteRequest(const std::string &data) {
       }
     }
   }
-
   size_t transferEncodingPos = data.find("Transfer-Encoding: chunked");
   if (transferEncodingPos != std::string::npos &&
       transferEncodingPos < headerEnd) {
-
     return data.find("0\r\n\r\n", headerEnd + 4) != std::string::npos;
   }
-
-  return true;
+  std::string method = data.substr(0, data.find(' '));
+  if (method == "GET" || method == "HEAD" || method == "DELETE") {
+    return true;
+  }
+  return false;
 }
 
 bool HttpUtils::isSecureRequest(const std::string &data) {

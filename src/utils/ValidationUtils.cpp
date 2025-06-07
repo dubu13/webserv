@@ -6,23 +6,6 @@
 
 using namespace HTTP;
 
-ValidationUtils::FileAccessResult
-ValidationUtils::validateFileAccess(std::string_view rootDir,
-                                    std::string_view uri) {
-  FileAccessResult result;
-  result.filePath = HttpUtils::buildPath(rootDir, uri);
-
-  if (!isPathSafe(uri)) {
-    result.status = StatusCode::FORBIDDEN;
-    result.isValid = false;
-    return result;
-  }
-
-  result.status = StatusCode::OK;
-  result.isValid = true;
-  return result;
-}
-
 bool ValidationUtils::validateLimit(size_t value, size_t limit,
                                     const char *errorMsg) {
   if (value > limit) {
@@ -33,10 +16,10 @@ bool ValidationUtils::validateLimit(size_t value, size_t limit,
 }
 
 bool ValidationUtils::validateContentLength(const std::string &length,
-                                            size_t &result) {
+                                            size_t &result, size_t maxSize) {
   try {
     result = std::stoull(length);
-    if (!validateBodySize(result)) {
+    if (!validateLimit(result, maxSize, "HTTP/1.1 Error: Body size too large")) {
       return false;
     }
     return true;
@@ -44,31 +27,6 @@ bool ValidationUtils::validateContentLength(const std::string &length,
     Logger::error("HTTP/1.1 Error: Invalid Content-Length format");
     return false;
   }
-}
-
-bool ValidationUtils::validateBodySize(size_t size) {
-  return validateLimit(size, Constants::MAX_TOTAL_SIZE,
-                       "HTTP/1.1 Error: Body size too large (max 10MB)");
-}
-
-bool ValidationUtils::validateChunkCount(size_t count) {
-  return validateLimit(count, Constants::MAX_CHUNK_COUNT,
-                       "HTTP/1.1 Error: Too many chunks");
-}
-
-bool ValidationUtils::validateChunkSize(size_t size) {
-  return validateLimit(size, Constants::MAX_CHUNK_SIZE,
-                       "HTTP/1.1 Error: Chunk size too large");
-}
-
-bool ValidationUtils::validateHeaderLength(size_t length) {
-  return validateLimit(length, Constants::MAX_HEADER_SIZE,
-                       "HTTP/1.1 Error: Headers too large");
-}
-
-bool ValidationUtils::validateUriLength(size_t length) {
-  return validateLimit(length, Constants::MAX_URI_LENGTH,
-                       "HTTP/1.1 Error: URI too long");
 }
 
 bool ValidationUtils::validateHeaderSize(const std::string &data,
@@ -96,13 +54,13 @@ bool ValidationUtils::isPathSafe(std::string_view path) {
       pathStr.find("..\\") != std::string::npos ||
       pathStr.find("/..") != std::string::npos ||
       pathStr.find("\\..") != std::string::npos) {
-    Logger::logf<LogLevel::WARN>("Path contains directory traversal: %",
+    Logger::logf<LogLevel::WARN>("Path contains directory traversal: %s",
                                  pathStr);
     return false;
   }
 
   if (pathStr.find('\0') != std::string::npos) {
-    Logger::logf<LogLevel::WARN>("Path contains null byte: %", pathStr);
+    Logger::logf<LogLevel::WARN>("Path contains null byte: %s", pathStr);
     return false;
   }
 
